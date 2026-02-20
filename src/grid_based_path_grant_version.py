@@ -24,12 +24,12 @@ do_animation = True
 
 class SweepSearcher:
     class SweepDirection(IntEnum):
-        UP = 1
-        DOWN = -1
+        UP = 2
+        DOWN = -2
 
     class MovingDirection(IntEnum):
-        RIGHT = 1
-        LEFT = -1
+        RIGHT = 2
+        LEFT = -2
 
     def __init__(self,
                  moving_direction, sweep_direction, x_inds_goal_y, goal_y):
