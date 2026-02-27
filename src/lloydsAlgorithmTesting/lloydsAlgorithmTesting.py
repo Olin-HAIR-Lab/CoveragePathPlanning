@@ -1,15 +1,16 @@
 
 
+from shapely.prepared import prep
+from shapely.geometry import Point, Polygon
+from scipy.spatial import ConvexHull, convex_hull_plot_2d
+from outline import image_to_polygon_points
+import os
+import imageio.v2 as imageio    # ← note the “.v2” here
+import matplotlib.pyplot as plt  # For the gifs
 import numpy as np
 from numpy import linalg as LA  # For the varinici algorithm
-import matplotlib.pyplot as plt  # For the gifs
-import imageio  # For the gifs
-import os
-# To plot the boundary of each cell
-from scipy.spatial import ConvexHull, convex_hull_plot_2d
-
-from shapely.geometry import Point, Polygon
-from shapely.prepared import prep
+import matplotlib
+matplotlib.use('Agg')
 
 
 def varinoci(dots, domain_poly, partition):
@@ -78,13 +79,26 @@ def plot_tessell(N, tessellation, new_dots, itera, imagen_names, domain_poly=Non
         points = np.array(tessellation[k])
         hull = ConvexHull(points)
         a = 0.5
-        x = points[hull.vertices, 0]
-        y = points[hull.vertices, 1]
-        plt.fill(x, y, c='C' + str(k), alpha=a)
-
-        for simplex in hull.simplices:
-            plt.plot(points[simplex, 0], points[simplex, 1],
-                     'k-', linewidth=3.1)
+        # build polygon from hull vertices and clip to domain
+        cell_poly = Polygon(points[hull.vertices])
+        if domain_poly is not None:
+            cell_poly = cell_poly.intersection(domain_poly)
+        if cell_poly.is_empty:
+            continue
+        if isinstance(cell_poly, Polygon):
+            regions = [cell_poly]
+        else:
+            # MultiPolygon -> iterate over component polygons
+            regions = list(cell_poly.geoms)
+        for region in regions:
+            x_reg, y_reg = region.exterior.xy
+            plt.fill(x_reg, y_reg, c='C' + str(k), alpha=a)
+            # draw edges explicitly from exterior coords
+            coords = list(region.exterior.coords)
+            for i in range(len(coords)-1):
+                plt.plot([coords[i][0], coords[i+1][0]],
+                         [coords[i][1], coords[i+1][1]],
+                         'k-', linewidth=3.1)
 
     plt.scatter(new_dots[:, 0], new_dots[:, 1], c='k', s=20, linewidth=2)
     plt.axis('off')
@@ -99,7 +113,7 @@ def plot_tessell(N, tessellation, new_dots, itera, imagen_names, domain_poly=Non
 
 
 def Lloyd_algoritm(Iterations, N, domain_poly, partition, seed=None,
-                   plot=False, history=False):
+                   plot=False, history=False, num_images=5):
     """Run Lloyd's algorithm on ``N`` sites inside ``domain_poly``.
 
     ``domain_poly`` must be a closed ``shapely.geometry.Polygon``; the grid
@@ -109,6 +123,18 @@ def Lloyd_algoritm(Iterations, N, domain_poly, partition, seed=None,
     """
     if seed is not None:
         np.random.seed(seed)
+
+    # remove old images if plotting so we start clean
+    if plot:
+        imgdir = os.path.join(os.getcwd(), "imagen")
+        if os.path.isdir(imgdir):
+            for fname in os.listdir(imgdir):
+                path = os.path.join(imgdir, fname)
+                if os.path.isfile(path):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
 
     # initialise sites randomly within polygon
     minx, miny, maxx, maxy = domain_poly.bounds
@@ -123,10 +149,18 @@ def Lloyd_algoritm(Iterations, N, domain_poly, partition, seed=None,
     history_dots = [new_dots]
     imagen_names = []
 
+    # determine which iterations we will save (evenly spaced across 0..Iterations-1)
+    if plot and Iterations > 0:
+        indices = np.linspace(
+            0, Iterations-1, num=min(num_images, Iterations), dtype=int)
+        plot_iters = set(indices.tolist())
+    else:
+        plot_iters = set()
+
     for itera in range(Iterations):
         tessellation = varinoci(new_dots, domain_poly, partition)
         new_dots = new_centroids(tessellation)
-        if plot:
+        if plot and itera in plot_iters:
             imagen_names = plot_tessell(N, tessellation, new_dots, itera,
                                         imagen_names, domain_poly=domain_poly)
         if history:
@@ -137,9 +171,39 @@ def Lloyd_algoritm(Iterations, N, domain_poly, partition, seed=None,
     return imagen_names, history_tessell, history_dots
 
 
+def makeGif(imagen_names):
+    new_imagen_names = []
+    Frames = 1  # duplicate each frame if you want a slower animation
+    for name in imagen_names:
+        for frame in range(Frames):
+            new_imagen_names.append(name)
+
+    gif_name = ('Lloyd_algorithm_P'+str(partition)+'_S'+str(seed) +
+                '_I'+str(iterations)+'_N'+str(N_dots))
+
+    cwd = os.getcwd()
+
+    newpath_gif = os.path.join(cwd, 'gifs')
+    if not os.path.exists(newpath_gif):
+        os.makedirs(newpath_gif)
+
+    gif_path = os.path.join(newpath_gif, gif_name + '.gif')
+    with imageio.get_writer(gif_path, mode='I') as writer:
+        for filename in new_imagen_names:
+            image = imageio.imread(filename)
+            writer.append_data(image)
+
+
 ############### SETTINGS #################
 
-# example domain: any closed polygon (first and last point may coincide)
+
+# image_path = "usa.png"
+# poly, points = image_to_polygon_points(
+#     image_path,
+#     num_points=200,         # Adjust for more/fewer points
+#     scale_to_range=(-16, 8)  # Adjust coordinate range
+# )
+
 poly = Polygon([
     (-71.2633943948142, 42.29151053590485),
     (-71.2628929214584, 42.290784490885386),
@@ -147,36 +211,19 @@ poly = Polygon([
     (-71.26200796847752, 42.29205010492521),
     (-71.2633943948142, 42.29151053590485)])
 
-N_dots = 15        # number of generating points/sites
-iterations = 15    # Lloyd iterations to perform
+
+N_dots = 5        # number of generating points/sites
+iterations = 5    # Lloyd iterations to perform
 plot = True       # produce image files
 history = False   # return history of tessellations
+seed = 6           # random seed (set to None for non-deterministic behaviour)
 partition = 350   # grid resolution for approximate voronoi
 
-########### MAIN ALGORITHM ##################
 
+########### MAIN ALGORITHM ##################
 imagen_names, history_tessell, history_dots = \
     Lloyd_algoritm(iterations, N_dots, poly, partition,
-                   plot=plot, history=history)
-
+                   seed=seed, plot=plot, history=history, num_images=iterations)
 
 if plot is True:
-    new_imagen_names = []
-    Frames = 1  # If you want an animation more slow, you can increce this parameter
-    for itera in range(iterations):
-        for frame in range(Frames):
-            new_imagen_names.append(imagen_names[itera])
-
-    gif_name = ('Lloyd_algorithm_P'+str(partition)+'_S'+str(seed) +
-                '_I'+str(iterations)+'_N'+str(N_dots))
-
-    cwd = os.getcwd()
-
-    newpath_gif = cwd + '\\gifs'
-    if not os.path.exists(newpath_gif):
-        os.makedirs(newpath_gif)
-
-    with imageio.get_writer(newpath_gif+'\\'+gif_name+'.gif', mode='I') as writer:
-        for filename in new_imagen_names:
-            image = imageio.imread(filename)
-            writer.append_data(image)
+    makeGif(imagen_names)

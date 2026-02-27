@@ -4,7 +4,7 @@ from shapely.ops import voronoi_diagram
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon as MplPolygon
-from grid_based_path_grant_version import planning_animation, do_animation
+from initLawnMowerPathGeneration.grid_based_path_grant_version import planning_animation, do_animation
 
 def sample_points_in_polygon(polygon, n=20000):
     minx, miny, maxx, maxy = polygon.bounds
