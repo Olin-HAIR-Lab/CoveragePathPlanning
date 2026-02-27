@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "mission": {
+    "items": [
+      {
+        "type": "takeoff"
+      },
+      {
+        "type": "navigation",
+        "navigationType": "waypoint",
+        "x": "1.0",
+        "y": "2.0",
+        "z": "3.0",
+        "frame": "global"
+      },
+      {
+        "type": "sample"
+      },
+      {
+        "type": "navigation",
+        "navigationType": "waypoint",
+        "x": "1.0",
+        "y": "2.0",
+        "z": "3.0",
+        "frame": "global"
+      },
+      {
+        "type": "sample"
+      },
+      {
+        "type": "navigation",
+        "navigationType": "waypoint",
+        "x": "1.0",
+        "y": "2.0",
+        "z": "3.0",
+        "frame": "global"
+      },
+      {
+        "type": "sample"
+      },
+      {
+        "type": "navigation",
+        "navigationType": "waypoint",
+        "x": "1.0",
+        "y": "2.0",
+        "z": "3.0",
+        "frame": "global"
+      },
+      {
+        "type": "sample"
+      },
+      {
+        "type": "rtl"
+      }
+    ]
+  }
+}

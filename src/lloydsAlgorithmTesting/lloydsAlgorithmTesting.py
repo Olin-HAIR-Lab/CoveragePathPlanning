@@ -213,7 +213,7 @@ poly = Polygon([
 
 
 N_dots = 5        # number of generating points/sites
-iterations = 5    # Lloyd iterations to perform
+iterations = 15    # Lloyd iterations to perform
 plot = True       # produce image files
 history = False   # return history of tessellations
 seed = 6           # random seed (set to None for non-deterministic behaviour)
