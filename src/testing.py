@@ -40,7 +40,7 @@ if (replace_path):
                 if i < len(px):
                     row.extend([px[i], py[i]])
                 else:
-                    row.extend(['', ''])
+                    row.extend([0, 0])
             writer.writerow(row)
 
 if do_animation:
