@@ -1,229 +1,310 @@
+# ================== IMPORTS ==================
+import matplotlib
+matplotlib.use('TkAgg')  # interactive backend (must be before pyplot)
 
-
+from outline import image_to_polygon_points
+import matplotlib.pyplot as plt
+import numpy as np
+from numpy import linalg as LA
 from shapely.prepared import prep
 from shapely.geometry import Point, Polygon
-from scipy.spatial import ConvexHull, convex_hull_plot_2d
-from outline import image_to_polygon_points
-import os
-import imageio.v2 as imageio    # ← note the “.v2” here
-import matplotlib.pyplot as plt  # For the gifs
-import numpy as np
-from numpy import linalg as LA  # For the varinici algorithm
-import matplotlib
-matplotlib.use('Agg')
+from scipy.spatial import ConvexHull
+import pyvrp
+import pyvrp.plotting
+import pyvrp.stop
 
+
+# ================== LLOYD CORE ==================
 
 def varinoci(dots, domain_poly, partition):
-    """Compute a very simple voronoi partition over the polygon.
-
-    Grid points are generated over the bounding box of ``domain_poly`` and
-    those falling outside the polygon are discarded.  Each remaining cell is
-    assigned to the closest site in ``dots`` using Euclidean distance.
-    """
     tessellation = {}
     minx, miny, maxx, maxy = domain_poly.bounds
     X = np.linspace(minx, maxx, partition)
     Y = np.linspace(miny, maxy, partition)
     prepared = prep(domain_poly)
+
     for xi in X:
         for yj in Y:
             p = np.array([xi, yj])
             if not prepared.contains(Point(p)):
-                # skip grid points outside the polygon
                 continue
+
             minimo = float("inf")
-            actual_dot = p
+            k_star = None
+
             for k, dot in enumerate(dots):
-                value = LA.norm(actual_dot - dot)
+                value = LA.norm(p - dot)
                 if value < minimo:
                     minimo = value
                     k_star = k
-            tessellation.setdefault(k_star, []).append(actual_dot)
+
+            if k_star is not None:
+                tessellation.setdefault(k_star, []).append(p)
+
     return tessellation
 
 
-def new_centroids(tessellation):
-    """Return the arithmetic mean of the points in each cell.
-
-    ``tessellation`` is a dict mapping site index to a list of grid points
-    assigned to that site.  The new centroid is just the average of those
-    points; since all grid points lie within the domain the average will also
-    lie inside the polygon.  The partition and domain size are irrelevant.
-    """
+def new_centroids(tessellation, old_dots):
     new_dots = []
-    for i in range(len(tessellation)):
-        xi = np.array(tessellation[i])
-        CI = xi.shape[0]
-        new_dots.append(np.sum(xi, axis=0) / CI)
+
+    for i in range(len(old_dots)):
+        if i in tessellation and len(tessellation[i]) > 0:
+            xi = np.array(tessellation[i])
+            new_dots.append(np.mean(xi, axis=0))
+        else:
+            # preserve centroid if cell empty
+            new_dots.append(old_dots[i])
+
     return np.array(new_dots)
 
 
-def plot_tessell(N, tessellation, new_dots, itera, imagen_names, domain_poly=None):
-    ################
-    # To plot the tessellation with differents colors.
-    ################
-    cwd = os.getcwd()
-
-    # We create a new path to save the images
-    newpath = os.path.join(cwd, "imagen")
-    if not os.path.exists(newpath):
-        os.makedirs(newpath)
-
-    plt.figure(itera)
-    # draw polygon border if provided
-    if domain_poly is not None:
-        x_poly, y_poly = domain_poly.exterior.xy
-        plt.plot(x_poly, y_poly, 'k-')
-
-    for k in range(N):
-        points = np.array(tessellation[k])
-        hull = ConvexHull(points)
-        a = 0.5
-        # build polygon from hull vertices and clip to domain
-        cell_poly = Polygon(points[hull.vertices])
-        if domain_poly is not None:
-            cell_poly = cell_poly.intersection(domain_poly)
-        if cell_poly.is_empty:
-            continue
-        if isinstance(cell_poly, Polygon):
-            regions = [cell_poly]
-        else:
-            # MultiPolygon -> iterate over component polygons
-            regions = list(cell_poly.geoms)
-        for region in regions:
-            x_reg, y_reg = region.exterior.xy
-            plt.fill(x_reg, y_reg, c='C' + str(k), alpha=a)
-            # draw edges explicitly from exterior coords
-            coords = list(region.exterior.coords)
-            for i in range(len(coords)-1):
-                plt.plot([coords[i][0], coords[i+1][0]],
-                         [coords[i][1], coords[i+1][1]],
-                         'k-', linewidth=3.1)
-
-    plt.scatter(new_dots[:, 0], new_dots[:, 1], c='k', s=20, linewidth=2)
-    plt.axis('off')
-
-    save_path = os.path.join(
-        newpath, 'Lloyd_algorithm_'+str(itera)+'.png')  # We save the images
-
-    plt.savefig(save_path)
-    plt.close()
-    imagen_names.append(save_path)
-    return imagen_names
-
-
-def Lloyd_algoritm(Iterations, N, domain_poly, partition, seed=None,
-                   plot=False, history=False, num_images=5):
-    """Run Lloyd's algorithm on ``N`` sites inside ``domain_poly``.
-
-    ``domain_poly`` must be a closed ``shapely.geometry.Polygon``; the grid
-    resolution is controlled by ``partition``.  The optional ``seed`` fixes the
-    pseudo‑random initialisation.  ``plot``/``history`` behave as before.  The
-    function returns the same three-tuples as the original version.
-    """
+def Lloyd_algoritm(Iterations, N, domain_poly, partition, seed=None):
     if seed is not None:
         np.random.seed(seed)
 
-    # remove old images if plotting so we start clean
-    if plot:
-        imgdir = os.path.join(os.getcwd(), "imagen")
-        if os.path.isdir(imgdir):
-            for fname in os.listdir(imgdir):
-                path = os.path.join(imgdir, fname)
-                if os.path.isfile(path):
-                    try:
-                        os.remove(path)
-                    except OSError:
-                        pass
-
-    # initialise sites randomly within polygon
     minx, miny, maxx, maxy = domain_poly.bounds
     new_dots = []
+
     while len(new_dots) < N:
         cand = np.random.uniform([minx, miny], [maxx, maxy])
         if domain_poly.contains(Point(cand)):
             new_dots.append(cand)
+
     new_dots = np.array(new_dots)
 
     history_tessell = []
     history_dots = [new_dots]
-    imagen_names = []
-
-    # determine which iterations we will save (evenly spaced across 0..Iterations-1)
-    if plot and Iterations > 0:
-        indices = np.linspace(
-            0, Iterations-1, num=min(num_images, Iterations), dtype=int)
-        plot_iters = set(indices.tolist())
-    else:
-        plot_iters = set()
 
     for itera in range(Iterations):
         tessellation = varinoci(new_dots, domain_poly, partition)
-        new_dots = new_centroids(tessellation)
-        if plot and itera in plot_iters:
-            imagen_names = plot_tessell(N, tessellation, new_dots, itera,
-                                        imagen_names, domain_poly=domain_poly)
-        if history:
-            history_tessell.append(tessellation)
-            history_dots.append(new_dots)
-        if itera % 10 == 0:
-            print('iteration number ' + str(itera) + ' executed.')
-    return imagen_names, history_tessell, history_dots
+        new_dots = new_centroids(tessellation, new_dots)
+
+        history_tessell.append(tessellation)
+        history_dots.append(new_dots)
+
+        print(f"Iteration {itera} complete.")
+
+    return history_tessell, history_dots
+
+def make_lloyd_gif(history_tessell, history_dots, poly, N_dots, filename="lloyd.gif"):
+    import imageio.v2 as imageio
+    import os
+
+    tmpdir = "/tmp/lloyd_frames"
+    os.makedirs(tmpdir, exist_ok=True)
+
+    frame_paths = []
+
+    for itera, (tessellation, dots) in enumerate(zip(history_tessell, history_dots[1:])):
+        fig, ax = plt.subplots(figsize=(7, 7))
+
+        x_poly, y_poly = poly.exterior.xy
+        ax.plot(x_poly, y_poly, 'k-', linewidth=2)
+
+        for k in range(N_dots):
+            if k not in tessellation:
+                continue
+            pts = np.array(tessellation[k])
+            if len(pts) < 3:
+                continue
+            hull = ConvexHull(pts)
+            cell_poly = Polygon(pts[hull.vertices]).intersection(poly)
+            if cell_poly.is_empty:
+                continue
+            regions = [cell_poly] if isinstance(cell_poly, Polygon) else list(cell_poly.geoms)
+            for region in regions:
+                x_reg, y_reg = region.exterior.xy
+                ax.fill(x_reg, y_reg, alpha=0.3)
+
+        ax.scatter(dots[:, 0], dots[:, 1], c='black', s=40)
+        ax.set_title(f"Lloyd Iteration {itera + 1}")
+        ax.axis('equal')
+
+        path = os.path.join(tmpdir, f"frame_{itera:03d}.png")
+        fig.savefig(path)
+        plt.close(fig)
+        frame_paths.append(path)
+
+    with imageio.get_writer(filename, mode='I', duration=0.4) as writer:
+        for path in frame_paths:
+            writer.append_data(imageio.imread(path))
+
+    print(f"GIF saved to {filename}")
 
 
-def makeGif(imagen_names):
-    new_imagen_names = []
-    Frames = 1  # duplicate each frame if you want a slower animation
-    for name in imagen_names:
-        for frame in range(Frames):
-            new_imagen_names.append(name)
 
-    gif_name = ('Lloyd_algorithm_P'+str(partition)+'_S'+str(seed) +
-                '_I'+str(iterations)+'_N'+str(N_dots))
+# ================== SETTINGS ==================
 
-    cwd = os.getcwd()
+image_path = "usa.png"
+poly, _ = image_to_polygon_points(
+    image_path,
+    num_points=200,
+    scale_to_range=(-16, 8)
+)
 
-    newpath_gif = os.path.join(cwd, 'gifs')
-    if not os.path.exists(newpath_gif):
-        os.makedirs(newpath_gif)
+# poly = Polygon([
+#     (-71.2633943948142, 42.29151053590485),
+#     (-71.2628929214584, 42.290784490885386),
+#     (-71.26149845009414, 42.291353821977765),
+#     (-71.26200796847752, 42.29205010492521),
+#     (-71.2633943948142, 42.29151053590485)])
 
-    gif_path = os.path.join(newpath_gif, gif_name + '.gif')
-    with imageio.get_writer(gif_path, mode='I') as writer:
-        for filename in new_imagen_names:
-            image = imageio.imread(filename)
-            writer.append_data(image)
-
-
-############### SETTINGS #################
+N_dots = 9
+iterations = 15
+partition = 600
+seed = 6
 
 
-# image_path = "usa.png"
-# poly, points = image_to_polygon_points(
-#     image_path,
-#     num_points=200,         # Adjust for more/fewer points
-#     scale_to_range=(-16, 8)  # Adjust coordinate range
+# ================== RUN LLOYD ==================
+
+history_tessell, history_dots = Lloyd_algoritm(
+    iterations, N_dots, poly, partition, seed
+)
+
+final_tessellation = history_tessell[-1]
+final_dots = history_dots[-1]  # THIS is the single source of truth
+
+make_lloyd_gif(history_tessell, history_dots, poly, N_dots)
+
+
+# ================== BUILD VRP DIRECTLY FROM final_dots ==================
+
+minx, miny, maxx, maxy = poly.bounds
+map_width = maxx - minx
+depot_coord = np.array([minx - map_width * 0.05, (miny + maxy) / 2])
+
+# Prepend depot to coords array
+coords = np.vstack([depot_coord, final_dots.copy()])
+# coords = final_dots.copy()
+travel_duration_matrix = np.empty((len(coords), len(coords)))
+time_windows = np.empty((len(coords), 2))
+for i in range(len(coords)):
+    for j in range(len(coords)):
+        travel_duration_matrix[i][j] = float(np.hypot(coords[i][0]-coords[j][0], coords[i][1]-coords[j][1]))
+
+max_time = 2000
+max_dist = travel_duration_matrix.max()
+travel_duration_matrix = travel_duration_matrix / max_dist * 100
+#travel_duration_matrix = travel_duration_matrix * 50000
+print(travel_duration_matrix)
+
+for i in range(len(coords)):
+    time_windows[i] = (0,max_time-travel_duration_matrix[i][0])
+
+# m = pyvrp.Model()
+# m.add_depot(
+#     x=coords[0][0],
+#     y=coords[0][1],
+#     name="Depot",
 # )
+# m.add_vehicle_type(3, capacity=3)
+# for i in range(1, len(coords)):
+#     m.add_client(
+#         x=coords[i][0],
+#         y=coords[i][1],
+#         delivery=1,
+#         name=f"Client {i}",
+#     )
+# for i, frm in enumerate(m.locations):
+#     for j, to in enumerate(m.locations):
+#         dx = coords[i][0] - coords[j][0]
+#         dy = coords[i][1] - coords[j][1]
+#         dist = int(np.hypot(dx, dy) * 100000)
+#         m.add_edge(frm, to, distance=dist)
+# res = m.solve(stop=pyvrp.stop.MaxRuntime(5))
+# solution = res.best
 
-poly = Polygon([
-    (-71.2633943948142, 42.29151053590485),
-    (-71.2628929214584, 42.290784490885386),
-    (-71.26149845009414, 42.291353821977765),
-    (-71.26200796847752, 42.29205010492521),
-    (-71.2633943948142, 42.29151053590485)])
+m = pyvrp.Model()
+m.add_vehicle_type(3, unit_distance_cost=0, unit_duration_cost=1)
+m.add_depot(
+    x=coords[0][0],
+    y=coords[0][1],
+    tw_early=time_windows[0][0],
+    tw_late=time_windows[0][1],
+    name="Depot",
+)
+for idx in range(1, len(coords)):
+    m.add_client(
+        x=coords[idx][0],
+        y=coords[idx][1],
+        tw_early=time_windows[idx][0],
+        tw_late=time_windows[idx][1],
+        service_duration=180,
+        name=f"Client {idx}",
+    )
+for frm_idx, frm in enumerate(m.locations):
+    for to_idx, to in enumerate(m.locations):
+        duration = travel_duration_matrix[frm_idx][to_idx]
+        m.add_edge(frm, to, distance=duration, duration=duration)
+res = m.solve(stop=pyvrp.stop.MaxRuntime(1))
+solution = res.best
 
 
-N_dots = 5        # number of generating points/sites
-iterations = 15    # Lloyd iterations to perform
-plot = True       # produce image files
-history = False   # return history of tessellations
-seed = 6           # random seed (set to None for non-deterministic behaviour)
-partition = 350   # grid resolution for approximate voronoi
 
 
-########### MAIN ALGORITHM ##################
-imagen_names, history_tessell, history_dots = \
-    Lloyd_algoritm(iterations, N_dots, poly, partition,
-                   seed=seed, plot=plot, history=history, num_images=iterations)
 
-if plot is True:
-    makeGif(imagen_names)
+
+
+
+
+# ================== PLOT FINAL LLOYD + VRP ==================
+
+plt.figure(figsize=(7, 7))
+
+# Polygon border
+x_poly, y_poly = poly.exterior.xy
+plt.plot(x_poly, y_poly, 'k-', linewidth=2)
+
+# Tessellation cells
+for k in range(N_dots):
+    if k not in final_tessellation:
+        continue
+
+    pts = np.array(final_tessellation[k])
+    if len(pts) < 3:
+        continue
+
+    hull = ConvexHull(pts)
+    cell_poly = Polygon(pts[hull.vertices]).intersection(poly)
+
+    if cell_poly.is_empty:
+        continue
+
+    regions = [cell_poly] if isinstance(cell_poly, Polygon) else list(cell_poly.geoms)
+
+    for region in regions:
+        x_reg, y_reg = region.exterior.xy
+        plt.fill(x_reg, y_reg, alpha=0.3)
+
+# Plot centroids
+plt.scatter(coords[:, 0], coords[:, 1], c='black', s=40)
+
+# Highlight depot
+plt.scatter(
+    coords[0][0],
+    coords[0][1],
+    c='red',
+    s=250,
+    marker='*',
+    zorder=5
+)
+
+# Overlay VRP routes
+colors = ['blue', 'green', 'purple']
+
+for r_idx, route in enumerate(solution.routes()):
+    route_indices = [0]  # start at depot
+
+    for visit in route:
+        route_indices.append(visit)
+
+    route_indices.append(0)  # return to depot
+
+    xs = [coords[i][0] for i in route_indices]
+    ys = [coords[i][1] for i in route_indices]
+
+    plt.plot(xs, ys, color=colors[r_idx % len(colors)], linewidth=2)
+
+plt.title("Final Lloyd Iteration + VRP Routes")
+plt.axis('equal')
+plt.show()

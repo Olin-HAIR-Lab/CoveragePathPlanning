@@ -1,0 +1,290 @@
+# ================== IMPORTS ==================
+import os
+import numpy as np
+from numpy import linalg as LA
+from shapely.prepared import prep
+from shapely.geometry import Point, Polygon
+from scipy.spatial import ConvexHull
+import pyvrp
+import pyvrp.stop
+
+# =================== USE ===================
+
+# run_lloyd(poly, n_dots, iterations, partition, ...) → returns final_dots, history_tessell, history_dots
+# make_lloyd_gif(history_tessell, history_dots, poly, n_dots, ...) → saves a GIF
+# run_vrp(final_dots, poly, n_vehicles, ...) → returns solution, coords
+# plot_solution(solution, coords, poly, final_tessellation, n_dots) 
+
+# ================== LLOYD ==================
+
+def varinoci(dots, domain_poly, partition):
+    tessellation = {}
+    minx, miny, maxx, maxy = domain_poly.bounds
+    X = np.linspace(minx, maxx, partition)
+    Y = np.linspace(miny, maxy, partition)
+    prepared = prep(domain_poly)
+
+    for xi in X:
+        for yj in Y:
+            p = np.array([xi, yj])
+            if not prepared.contains(Point(p)):
+                continue
+            minimo = float("inf")
+            k_star = None
+            for k, dot in enumerate(dots):
+                value = LA.norm(p - dot)
+                if value < minimo:
+                    minimo = value
+                    k_star = k
+            if k_star is not None:
+                tessellation.setdefault(k_star, []).append(p)
+
+    return tessellation
+
+
+def new_centroids(tessellation, old_dots):
+    new_dots = []
+    for i in range(len(old_dots)):
+        if i in tessellation and len(tessellation[i]) > 0:
+            xi = np.array(tessellation[i])
+            new_dots.append(np.mean(xi, axis=0))
+        else:
+            new_dots.append(old_dots[i])
+    return np.array(new_dots)
+
+
+def run_lloyd(poly, n_dots, iterations, partition, seed=None, verbose=False):
+    """
+    Run Lloyd's algorithm on a shapely Polygon.
+
+    Parameters
+    ----------
+    poly       : shapely.geometry.Polygon
+    n_dots     : int   — number of sites
+    iterations : int   — number of Lloyd iterations
+    partition  : int   — grid resolution for Voronoi approximation
+    seed       : int | None
+    verbose    : bool  — print iteration progress
+
+    Returns
+    -------
+    final_dots        : np.ndarray (n_dots, 2)
+    history_tessell   : list of tessellation dicts
+    history_dots      : list of np.ndarray
+    """
+    if seed is not None:
+        np.random.seed(seed)
+
+    minx, miny, maxx, maxy = poly.bounds
+    new_dots = []
+    while len(new_dots) < n_dots:
+        cand = np.random.uniform([minx, miny], [maxx, maxy])
+        if poly.contains(Point(cand)):
+            new_dots.append(cand)
+    new_dots = np.array(new_dots)
+
+    history_tessell = []
+    history_dots = [new_dots]
+
+    for itera in range(iterations):
+        tessellation = varinoci(new_dots, poly, partition)
+        new_dots = new_centroids(tessellation, new_dots)
+        history_tessell.append(tessellation)
+        history_dots.append(new_dots)
+        if verbose:
+            print(f"Lloyd iteration {itera} complete.")
+
+    return new_dots, history_tessell, history_dots
+
+
+# ================== GIF ==================
+
+def make_lloyd_gif(history_tessell, history_dots, poly, n_dots,
+                   filename="lloyd.gif", duration=0.4):
+    """
+    Save an animated GIF of the Lloyd iterations.
+
+    Parameters
+    ----------
+    history_tessell : list of tessellation dicts (from run_lloyd)
+    history_dots    : list of np.ndarray          (from run_lloyd)
+    poly            : shapely.geometry.Polygon
+    n_dots          : int
+    filename        : str  — output path for the GIF
+    duration        : float — seconds per frame
+    """
+    import imageio.v2 as imageio
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    tmpdir = "/tmp/lloyd_frames"
+    os.makedirs(tmpdir, exist_ok=True)
+    frame_paths = []
+
+    for itera, (tessellation, dots) in enumerate(zip(history_tessell, history_dots[1:])):
+        fig, ax = plt.subplots(figsize=(7, 7))
+        x_poly, y_poly = poly.exterior.xy
+        ax.plot(x_poly, y_poly, 'k-', linewidth=2)
+
+        for k in range(n_dots):
+            if k not in tessellation:
+                continue
+            pts = np.array(tessellation[k])
+            if len(pts) < 3:
+                continue
+            hull = ConvexHull(pts)
+            cell_poly = Polygon(pts[hull.vertices]).intersection(poly)
+            if cell_poly.is_empty:
+                continue
+            regions = [cell_poly] if isinstance(cell_poly, Polygon) else list(cell_poly.geoms)
+            for region in regions:
+                x_reg, y_reg = region.exterior.xy
+                ax.fill(x_reg, y_reg, alpha=0.3)
+
+        ax.scatter(dots[:, 0], dots[:, 1], c='black', s=40)
+        ax.set_title(f"Lloyd Iteration {itera + 1}")
+        ax.axis('equal')
+
+        path = os.path.join(tmpdir, f"frame_{itera:03d}.png")
+        fig.savefig(path)
+        plt.close(fig)
+        frame_paths.append(path)
+
+    with imageio.get_writer(filename, mode='I', duration=duration) as writer:
+        for path in frame_paths:
+            writer.append_data(imageio.imread(path))
+
+    print(f"GIF saved to {filename}")
+
+
+# ================== VRP ==================
+
+def build_depot_coord(poly):
+    """Place the depot just left of the polygon, vertically centered."""
+    minx, miny, maxx, maxy = poly.bounds
+    map_width = maxx - minx
+    return np.array([minx - map_width * 0.05, (miny + maxy) / 2])
+
+
+def run_vrp(final_dots, poly, n_vehicles, max_time=None,
+            service_duration=180, runtime=5):
+    """
+    Build and solve a VRP from Lloyd centroids.
+
+    Parameters
+    ----------
+    final_dots       : np.ndarray (n_dots, 2) — from run_lloyd
+    poly             : shapely.geometry.Polygon — used to place the depot
+    n_vehicles       : int — number of vehicles (also used as capacity)
+    max_time         : float | None — time horizon; defaults to 100 * n_nodes
+    service_duration : float — service time at each client (in scaled units)
+    runtime          : float — solver time limit in seconds
+
+    Returns
+    -------
+    solution  : pyvrp Solution object
+    coords    : np.ndarray (n_nodes, 2) — depot first, then clients
+    """
+    depot_coord = build_depot_coord(poly)
+    coords = np.vstack([depot_coord, final_dots.copy()])
+    n = len(coords)
+
+    # Build duration matrix, normalised so longest edge = 100
+    dur = np.empty((n, n))
+    for i in range(n):
+        for j in range(n):
+            dur[i][j] = float(np.hypot(coords[i][0] - coords[j][0],
+                                       coords[i][1] - coords[j][1]))
+    max_dist = dur.max()
+    dur = dur / max_dist * 100
+
+    if max_time is None:
+        max_time = 100 * n
+
+    # Time windows: everyone starts at 0, must finish before max_time
+    time_windows = np.empty((n, 2))
+    for i in range(n):
+        tw_late = max(0.0, max_time - dur[i][0])
+        time_windows[i] = (0, tw_late)
+
+    m = pyvrp.Model()
+    m.add_vehicle_type(n_vehicles, unit_distance_cost=0, unit_duration_cost=1)
+    m.add_depot(
+        x=coords[0][0],
+        y=coords[0][1],
+        tw_early=time_windows[0][0],
+        tw_late=time_windows[0][1],
+        name="Depot",
+    )
+    for idx in range(1, n):
+        m.add_client(
+            x=coords[idx][0],
+            y=coords[idx][1],
+            tw_early=time_windows[idx][0],
+            tw_late=time_windows[idx][1],
+            service_duration=service_duration,
+            name=f"Client {idx}",
+        )
+    for frm_idx, frm in enumerate(m.locations):
+        for to_idx, to in enumerate(m.locations):
+            d = dur[frm_idx][to_idx]
+            m.add_edge(frm, to, distance=d, duration=d)
+
+    res = m.solve(stop=pyvrp.stop.MaxRuntime(runtime))
+    return res.best, coords
+
+
+# ================== PLOT ==================
+
+def plot_solution(solution, coords, poly, final_tessellation, n_dots,
+                  title="Final Lloyd Iteration + VRP Routes"):
+    """
+    Plot the tessellation, centroids, depot, and VRP routes.
+
+    Parameters
+    ----------
+    solution           : pyvrp Solution object — from run_vrp
+    coords             : np.ndarray (n_nodes, 2) — from run_vrp
+    poly               : shapely.geometry.Polygon
+    final_tessellation : dict — last entry of history_tessell
+    n_dots             : int
+    title              : str
+    """
+    import matplotlib
+    matplotlib.use('TkAgg')
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(7, 7))
+
+    x_poly, y_poly = poly.exterior.xy
+    plt.plot(x_poly, y_poly, 'k-', linewidth=2)
+
+    for k in range(n_dots):
+        if k not in final_tessellation:
+            continue
+        pts = np.array(final_tessellation[k])
+        if len(pts) < 3:
+            continue
+        hull = ConvexHull(pts)
+        cell_poly = Polygon(pts[hull.vertices]).intersection(poly)
+        if cell_poly.is_empty:
+            continue
+        regions = [cell_poly] if isinstance(cell_poly, Polygon) else list(cell_poly.geoms)
+        for region in regions:
+            x_reg, y_reg = region.exterior.xy
+            plt.fill(x_reg, y_reg, alpha=0.3)
+
+    plt.scatter(coords[:, 0], coords[:, 1], c='black', s=40)
+    plt.scatter(coords[0][0], coords[0][1], c='red', s=250, marker='*', zorder=5)
+
+    colors = ['blue', 'green', 'purple', 'orange', 'cyan', 'magenta']
+    for r_idx, route in enumerate(solution.routes()):
+        route_indices = [0] + list(route) + [0]
+        xs = [coords[i][0] for i in route_indices]
+        ys = [coords[i][1] for i in route_indices]
+        plt.plot(xs, ys, color=colors[r_idx % len(colors)], linewidth=2)
+
+    plt.title(title)
+    plt.axis('equal')
+    plt.show()
