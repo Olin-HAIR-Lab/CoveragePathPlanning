@@ -1,20 +1,39 @@
 # ================== IMPORTS ==================
+import math
 import matplotlib
 matplotlib.use('TkAgg')  # interactive backend (must be before pyplot)
 
-from outline import image_to_polygon_points
+# from outline import image_to_polygon_points
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy import linalg as LA
 from shapely.prepared import prep
 from shapely.geometry import Point, Polygon
+from shapely.ops import transform
 from scipy.spatial import ConvexHull
 import pyvrp
 import pyvrp.plotting
 import pyvrp.stop
+from pyproj import Transformer
 
+class generateCells():
+    '''
+    This class has two objectives based on 1 assumption
+    The assumption: A singular drone's duty cycle* is dependent 
+
+    *I may be using duty cycle incorrectly. To elaborate the drones could hypto
+    The number of cells is dependent on  it takes the drones to cover the plot equally.
+
+    1) generate the number of cells
+    '''
+    def somthing():
+        pass
+class routing():
+    def something():
+        pass
 
 # ================== LLOYD CORE ==================
+
 
 def varinoci(dots, domain_poly, partition):
     tessellation = {}
@@ -131,25 +150,109 @@ def make_lloyd_gif(history_tessell, history_dots, poly, N_dots, filename="lloyd.
 
     print(f"GIF saved to {filename}")
 
+#### determining number of cells based on size of polygon and return to base
+
+def polygon_area_m2(poly_latlon):
+    """
+    Convert WGS84 polygon to UTM and return area in m².
+    """
+
+    # UTM zone 19N (correct for Massachusetts)
+    transformer = Transformer.from_crs(
+        "EPSG:4326",      # WGS84
+        "EPSG:32619",     # UTM zone 19N
+        always_xy=True
+    )
+
+    poly_utm = transform(transformer.transform, poly_latlon)
+
+    return poly_utm.area
+
+def compute_sample_count(map,
+                         sample_time,
+                         speed,
+                         mission_time,
+                         num_agents=1):
+        """
+        Returns TOTAL sampling points all agents can complete.
+        poly: shapely Polygon in lat/lon
+        sample_time: seconds per sample
+        speed: m/s
+        mission_time: per-agent time limit (s)
+        num_agents: number of UAVs
+        """
+
+        area = polygon_area_m2(map)
+
+        # Upper bound assuming zero travel time
+        max_possible = int((mission_time * num_agents) / sample_time)
+        best_N = 0
+
+        for N in range(1, max_possible + 1):
+
+            N_per_agent = N / num_agents
+
+            sampling_time = N_per_agent * sample_time
+            travel_time = math.sqrt(area * N_per_agent) / speed
+
+            total_time = sampling_time + travel_time
+
+            if total_time <= mission_time:
+                best_N = N
+            else:
+                break  # further N will only increase time
+        return best_N
 
 
 # ================== SETTINGS ==================
 
 image_path = "usa.png"
-poly, _ = image_to_polygon_points(
-    image_path,
-    num_points=200,
-    scale_to_range=(-16, 8)
+# poly, _ = image_to_polygon_points(
+#     image_path,
+#     num_points=200,
+#     scale_to_range=(-16, 8)
+# )
+
+poly = Polygon([
+    (-71.2633943948142, 42.29151053590485),
+    (-71.2628929214584, 42.290784490885386),
+    (-71.26149845009414, 42.291353821977765),
+    (-71.26200796847752, 42.29205010492521),
+    (-71.2633943948142, 42.29151053590485)])
+
+
+
+poly_2 = Polygon([
+    (-71.2642, 42.2913),
+    (-71.2635, 42.2906),
+    (-71.2627, 42.2904),
+    (-71.2619, 42.2909),
+    (-71.2616, 42.2916),
+    (-71.2621, 42.2922),
+    (-71.2630, 42.2924),
+    (-71.2638, 42.2919),
+    (-71.2642, 42.2913)
+])
+
+poly_3 = Polygon([
+    (-71.2638, 42.2922),
+    (-71.2630, 42.2917),
+    (-71.2622, 42.2919),
+    (-71.2617, 42.2914),
+    (-71.2620, 42.2907),
+    (-71.2628, 42.2903),
+    (-71.2636, 42.2908),
+    (-71.2640, 42.2915),
+    (-71.2638, 42.2922)
+])
+
+N_dots = compute_sample_count(
+    poly,
+    sample_time=180,        # 3 minute per soil sampling time
+    speed=5.0,            # 5 m/s cruise
+    mission_time=480,      # 15 minute mission
+    num_agents=3
 )
-
-# poly = Polygon([
-#     (-71.2633943948142, 42.29151053590485),
-#     (-71.2628929214584, 42.290784490885386),
-#     (-71.26149845009414, 42.291353821977765),
-#     (-71.26200796847752, 42.29205010492521),
-#     (-71.2633943948142, 42.29151053590485)])
-
-N_dots = 9
 iterations = 15
 partition = 600
 seed = 6
@@ -182,7 +285,7 @@ for i in range(len(coords)):
     for j in range(len(coords)):
         travel_duration_matrix[i][j] = float(np.hypot(coords[i][0]-coords[j][0], coords[i][1]-coords[j][1]))
 
-max_time = 2000
+max_time = 900
 max_dist = travel_duration_matrix.max()
 travel_duration_matrix = travel_duration_matrix / max_dist * 100
 #travel_duration_matrix = travel_duration_matrix * 50000
