@@ -253,6 +253,7 @@ N_dots = compute_sample_count(
     mission_time=480,      # 15 minute mission
     num_agents=3
 )
+
 iterations = 15
 partition = 600
 seed = 6
@@ -267,7 +268,7 @@ history_tessell, history_dots = Lloyd_algoritm(
 final_tessellation = history_tessell[-1]
 final_dots = history_dots[-1]  # THIS is the single source of truth
 
-make_lloyd_gif(history_tessell, history_dots, poly, N_dots)
+# make_lloyd_gif(history_tessell, history_dots, poly, N_dots)
 
 
 # ================== BUILD VRP DIRECTLY FROM final_dots ==================
