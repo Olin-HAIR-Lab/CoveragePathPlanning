@@ -5,18 +5,45 @@ from shapely.geometry import Point
 
 
 def build_vrp_model(coords, time_windows, travel_duration_matrix, 
-                    max_vehicles, service_time=180, capacity=[], fixed_cost=0):
+                    max_vehicles, mode, service_time=180, capacity=None, 
+                    fixed_cost=0):
     
     m = pyvrp.Model()
 
-    m.add_vehicle_type(
-        max_vehicles,
-        capacity=capacity,
-        unit_distance_cost=0,
-        unit_duration_cost=1,
-        fixed_cost=fixed_cost
-    )
-
+    if mode == "multi":
+        m.add_vehicle_type(
+            max_vehicles,
+            unit_distance_cost=0,
+            unit_duration_cost=1,
+        )
+        for idx in range(1, len(coords)):
+            m.add_client(
+                x=coords[idx][0],
+                y=coords[idx][1],
+                tw_early=time_windows[idx][0],
+                tw_late=time_windows[idx][1],
+                service_duration=service_time,
+                name=f"Client {idx}",
+            )
+    elif mode == "single":
+        m.add_vehicle_type(
+            max_vehicles,
+            capacity=capacity,
+            unit_distance_cost=0,
+            unit_duration_cost=1,
+            fixed_cost=fixed_cost
+        )
+        for idx in range(1, len(coords)):
+            m.add_client(
+                x=coords[idx][0],
+                y=coords[idx][1],
+                tw_early=time_windows[idx][0],
+                tw_late=time_windows[idx][1],
+                service_duration=service_time,
+                name=f"Client {idx}",
+                delivery=1
+            )
+    
     m.add_depot(
         x=coords[0][0],
         y=coords[0][1],
@@ -24,17 +51,6 @@ def build_vrp_model(coords, time_windows, travel_duration_matrix,
         tw_late=time_windows[0][1],
         name="Depot",
     )
-
-    for idx in range(1, len(coords)):
-        m.add_client(
-            x=coords[idx][0],
-            y=coords[idx][1],
-            tw_early=time_windows[idx][0],
-            tw_late=time_windows[idx][1],
-            service_duration=service_time,
-            name=f"Client {idx}",
-            delivery=1
-        )
 
     for i, frm in enumerate(m.locations):
         for j, to in enumerate(m.locations):
@@ -52,6 +68,7 @@ def solve_vrp_unlimited(coords, time_windows, travel_duration_matrix):
         coords,
         time_windows,
         travel_duration_matrix,
+        mode="multi",
         max_vehicles=100
     )
 
@@ -70,6 +87,7 @@ def solve_vrp_balanced(coords, time_windows, travel_duration_matrix, num_vehicle
         coords,
         time_windows,
         travel_duration_matrix,
+        mode="single",
         max_vehicles=num_vehicles,
         capacity=capacity,
         fixed_cost=500
