@@ -17,6 +17,9 @@ from pyproj import Transformer
 
 from jsonTesting import makeJSONMission
 
+### make config file for global variables
+
+
 class generateCells():
     '''
     This class has two objectives based on 1 assumption
@@ -151,57 +154,69 @@ def make_lloyd_gif(history_tessell, history_dots, poly, N_dots, filename="lloyd.
 
     print(f"GIF saved to {filename}")
 
+
+
 #### determining number of cells based on size of polygon and return to base
 
 def polygon_area_m2(poly_latlon):
     """
     Convert WGS84 polygon to UTM and return area in m².
     """
-
-    # UTM zone 19N (correct for Massachusetts)
     transformer = Transformer.from_crs(
-        "EPSG:4326",      # WGS84
-        "EPSG:32619",     # UTM zone 19N
+        "EPSG:4326",   # WGS84
+        "EPSG:32619",  # UTM zone 19N (Massachusetts)
         always_xy=True
     )
 
     poly_utm = transform(transformer.transform, poly_latlon)
-
     return poly_utm.area
 
-def compute_sample_count(map,
-                         sample_time,
-                         speed,
-                         mission_time,
-                         num_agents=1):
+
+class SamplePoints:
+    def __init__(self, map_polygon, home, sample_time, speed, mission_time, num_agents):
         """
-        Returns TOTAL sampling points all agents can complete.
-        poly: shapely Polygon in lat/lon
+        map_polygon: shapely Polygon (lat/lon)
+        home: (lat, lon)
         sample_time: seconds per sample
         speed: m/s
-        mission_time: per-agent time limit (s)
+        mission_time: seconds (per agent)
         num_agents: number of UAVs
         """
+        self.map = map_polygon
+        self.home = home
+        self.sample_time = sample_time
+        self.speed = speed
+        self.mission_time = mission_time
+        self.num_agents = num_agents
 
-        area = polygon_area_m2(map)
+    def compute_sample_count(self):
+        """
+        Returns TOTAL sampling points all agents can complete.
+        Ensures result is divisible by num_agents.
+        """
+        area = polygon_area_m2(self.map)
 
-        # Upper bound assuming zero travel time
-        max_possible = int((mission_time * num_agents) / sample_time)
+        max_possible = int(
+            (self.mission_time * self.num_agents) / self.sample_time
+        )
+
         best_N = 0
 
-        for N in range(1, max_possible + 1):
+        # iterate ONLY over divisible values (cleaner + faster)
+        for N in range(self.num_agents, max_possible + 1, self.num_agents):
 
-            N_per_agent = N / num_agents
+            N_per_agent = N / self.num_agents
 
-            sampling_time = N_per_agent * sample_time
-            travel_time = math.sqrt(area * N_per_agent) / speed
+            sampling_time = N_per_agent * self.sample_time
+            travel_time = math.sqrt(area * N_per_agent) / self.speed
 
             total_time = sampling_time + travel_time
 
-            if total_time <= mission_time:
+            if total_time <= self.mission_time:
                 best_N = N
             else:
-                break  # further N will only increase time
+                break  # safe: time increases monotonically
+
         return best_N
 
 
@@ -247,7 +262,9 @@ poly_3 = Polygon([
     (-71.2638, 42.2922)
 ])
 
-N_dots = compute_sample_count(
+soccer_home = (-71.2633943948142, 42.29151053590485)
+
+sampler = SamplePoints(
     poly,
     sample_time=180,        # 3 minute per soil sampling time
     speed=5.0,            # 5 m/s cruise
@@ -255,10 +272,13 @@ N_dots = compute_sample_count(
     num_agents=3
 )
 
+N_dots = sampler.compute_sample_count()
+
+print("Total sample points:", N_dots)
+
 iterations = 15
 partition = 600
 seed = 6
-
 
 # ================== RUN LLOYD ==================
 
@@ -271,7 +291,36 @@ final_dots = history_dots[-1]  # THIS is the single source of truth
 
 # make_lloyd_gif(history_tessell, history_dots, poly, N_dots)
 
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
 
+points = np.array(history_dots[-1])
+K = 3
+
+kmeans = KMeans(n_clusters=K, random_state=0).fit(points)
+labels = kmeans.labels_
+centroids = kmeans.cluster_centers_
+
+plt.figure(figsize=(8, 8))
+
+# Plot each cluster
+for k in range(K):
+    cluster_points = points[labels == k]
+    plt.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f"Zone {k}", s=10)
+
+# Plot centroids
+plt.scatter(centroids[:, 0], centroids[:, 1], c='black', marker='x', s=100, label='Centroids')
+
+# Optional: plot polygon boundary
+if poly is not None:
+    x, y = poly.exterior.xy
+    plt.plot(x, y, 'k-', linewidth=2)
+
+plt.legend()
+plt.title("Drone Zones (K-means Clustering)")
+plt.axis('equal')
+plt.show()
 # ================== BUILD VRP DIRECTLY FROM final_dots ==================
 
 minx, miny, maxx, maxy = poly.bounds
