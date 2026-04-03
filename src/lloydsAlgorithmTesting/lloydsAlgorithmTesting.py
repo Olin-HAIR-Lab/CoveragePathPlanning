@@ -12,9 +12,10 @@ from shapely.geometry import Point, Polygon
 from shapely.ops import transform
 from scipy.spatial import ConvexHull
 import pyvrp
-import pyvrp.plotting
 import pyvrp.stop
 from pyproj import Transformer
+
+from jsonTesting import makeJSONMission
 
 class generateCells():
     '''
@@ -250,7 +251,7 @@ N_dots = compute_sample_count(
     poly,
     sample_time=180,        # 3 minute per soil sampling time
     speed=5.0,            # 5 m/s cruise
-    mission_time=480,      # 15 minute mission
+    mission_time=900,      # 15 minute mission
     num_agents=3
 )
 iterations = 15
@@ -288,37 +289,13 @@ for i in range(len(coords)):
 max_time = 900
 max_dist = travel_duration_matrix.max()
 travel_duration_matrix = travel_duration_matrix / max_dist * 100
-#travel_duration_matrix = travel_duration_matrix * 50000
 print(travel_duration_matrix)
 
 for i in range(len(coords)):
     time_windows[i] = (0,max_time-travel_duration_matrix[i][0])
 
-# m = pyvrp.Model()
-# m.add_depot(
-#     x=coords[0][0],
-#     y=coords[0][1],
-#     name="Depot",
-# )
-# m.add_vehicle_type(3, capacity=3)
-# for i in range(1, len(coords)):
-#     m.add_client(
-#         x=coords[i][0],
-#         y=coords[i][1],
-#         delivery=1,
-#         name=f"Client {i}",
-#     )
-# for i, frm in enumerate(m.locations):
-#     for j, to in enumerate(m.locations):
-#         dx = coords[i][0] - coords[j][0]
-#         dy = coords[i][1] - coords[j][1]
-#         dist = int(np.hypot(dx, dy) * 100000)
-#         m.add_edge(frm, to, distance=dist)
-# res = m.solve(stop=pyvrp.stop.MaxRuntime(5))
-# solution = res.best
-
 m = pyvrp.Model()
-m.add_vehicle_type(3, unit_distance_cost=0, unit_duration_cost=1)
+m.add_vehicle_type(4, unit_distance_cost=0, unit_duration_cost=1)
 m.add_depot(
     x=coords[0][0],
     y=coords[0][1],
@@ -342,8 +319,13 @@ for frm_idx, frm in enumerate(m.locations):
 res = m.solve(stop=pyvrp.stop.MaxRuntime(1))
 solution = res.best
 
+routes = solution.routes()
 
+paths = [None, None, None]
+for i, route in enumerate(routes):
+    paths[i] = [Point(coords[client][0], coords[client][1], 3.0) for client in route]
 
+makeJSONMission("output.json", *paths[:3])
 
 
 
