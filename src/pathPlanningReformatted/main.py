@@ -10,6 +10,9 @@ from vehicleRoutingProblem import (
     solve_vrp_balanced,
     extract_paths
 )
+from collisionAvoidance import (
+    add_delays_to_avoid_collisions
+)
 from plotting import plot_results
 from jsonTesting import makeJSONMission
 
@@ -23,17 +26,21 @@ def polygon_area_m2(poly_latlon):
 def compute_sample_count(map, sample_time, speed, mission_time, num_agents=1):
     area = polygon_area_m2(map)
     max_possible = int((mission_time * num_agents) / sample_time)
-
-    best_N = 0
     for N in range(1, max_possible + 1):
+
+        if N % num_agents != 0:
+            continue  
         N_per_agent = N / num_agents
+
         sampling_time = N_per_agent * sample_time
         travel_time = math.sqrt(area * N_per_agent) / speed
 
-        if sampling_time + travel_time <= mission_time:
+        total_time = sampling_time + travel_time
+
+        if total_time <= mission_time:
             best_N = N
         else:
-            break
+            break  
 
     return best_N
 
@@ -100,11 +107,28 @@ time_windows = np.array([
 
 solution = solve_vrp_unlimited(coords, time_windows, travel_duration_matrix)
 #solution = solve_vrp_balanced(coords, time_windows, travel_duration_matrix, num_vehicles=3)
+# solution = solve_vrp_unlimited(coords, time_windows, travel_duration_matrix)
+solution2 = solve_vrp_balanced(coords, time_windows, travel_duration_matrix, num_vehicles=3)
 
 paths, routes = extract_paths(solution, coords)
+
+# coords: list of (x, y) or (lon, lat)
+routes_coords = []
+for route in routes:
+    route_coords = [coords[i] for i in route]  # map node indices to coordinates
+    routes_coords.append(route_coords)
+
+
+d_safe = 2.0  # meters
+
+trajectories, delays = add_delays_to_avoid_collisions(routes_coords, speed=5, d_safe=d_safe)
+print("Delays applied:", delays)
 
 # JSON output
 # makeJSONMission("output.json", *paths[:3])
 
 # Plot
 plot_results(poly, final_tessellation, coords, solution)
+
+# plot_results(poly, final_tessellation, coords, solution)
+plot_results(poly, final_tessellation, routes_coords, solution2)
