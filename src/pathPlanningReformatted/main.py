@@ -98,13 +98,15 @@ time_windows = np.array([
 
 # ===== CHOOSE MODE =====
 
-# solution = solve_vrp_unlimited(coords, time_windows, travel_duration_matrix)
-solution = solve_vrp_balanced(coords, time_windows, travel_duration_matrix, num_vehicles=3)
+solution = solve_vrp_unlimited(coords, time_windows, travel_duration_matrix)
+solution2 = solve_vrp_balanced(coords, time_windows, travel_duration_matrix, num_vehicles=3)
 
 paths, routes = extract_paths(solution, coords)
+paths, routes = extract_paths(solution2, coords)
 
 # JSON output
-makeJSONMission("output.json", *paths[:3])
+# makeJSONMission("output.json", *paths[:3])
 
 # Plot
 plot_results(poly, final_tessellation, coords, solution)
+plot_results(poly, final_tessellation, coords, solution2)
