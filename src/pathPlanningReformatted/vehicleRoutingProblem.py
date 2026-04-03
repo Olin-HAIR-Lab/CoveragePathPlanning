@@ -30,7 +30,7 @@ def build_vrp_model(coords, time_windows, travel_duration_matrix,
             max_vehicles,
             capacity=capacity,
             unit_distance_cost=0,
-            unit_duration_cost=1,
+            unit_duration_cost=1000,
             fixed_cost=fixed_cost
         )
         for idx in range(1, len(coords)):

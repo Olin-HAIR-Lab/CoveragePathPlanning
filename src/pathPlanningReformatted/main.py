@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import copy
 from shapely.geometry import Polygon
 from shapely.ops import transform
 from pyproj import Transformer
@@ -64,7 +65,10 @@ N_dots = compute_sample_count(
     num_agents=3
 )
 
-iterations = 5
+N_dots = 9
+# N_dots = 30
+
+iterations = 10
 partition = 300
 seed = 6
 
@@ -106,15 +110,23 @@ time_windows = np.array([
 
 # ===== CHOOSE MODE =====
 
-solution = solve_vrp_unlimited(coords, time_windows, travel_duration_matrix)
-#solution = solve_vrp_balanced(coords, time_windows, travel_duration_matrix, num_vehicles=3)
+# Recharge
+# solution = solve_vrp_unlimited(coords, time_windows, travel_duration_matrix)
+
+# No Recharge
+solution = solve_vrp_balanced(coords, time_windows, travel_duration_matrix, num_vehicles=3)
+
 
 paths, routes = extract_paths(solution, coords)
 
 # coords: list of (x, y) or (lon, lat)
 routes_coords = []
-for route in routes:
-    route_coords = [coords[i] for i in route]  # map node indices to coordinates
+for r_idx, route in enumerate(solution.routes()):
+    route_indices = [0] + list(route) + [0]
+
+    coords[0][0] += map_height*0.1
+
+    route_coords = [copy.copy(coords[i]) for i in route_indices]
     routes_coords.append(route_coords)
 
 # Collision Detection
