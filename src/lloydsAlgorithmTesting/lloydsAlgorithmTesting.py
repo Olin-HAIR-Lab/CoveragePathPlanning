@@ -296,7 +296,7 @@ for i in range(len(coords)):
     time_windows[i] = (0,max_time-travel_duration_matrix[i][0])
 
 m = pyvrp.Model()
-m.add_vehicle_type(4, unit_distance_cost=0, unit_duration_cost=1)
+m.add_vehicle_type(100, unit_distance_cost=0, unit_duration_cost=1)
 m.add_depot(
     x=coords[0][0],
     y=coords[0][1],
