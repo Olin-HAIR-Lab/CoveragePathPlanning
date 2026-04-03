@@ -8,11 +8,29 @@ from matplotlib.animation import FuncAnimation
 
 
 # ===============================
-# Helpers
+# Geographic helpers
 # ===============================
 
+EARTH_R = 6_371_000  # metres
+
 def dist(p1, p2):
-    return math.hypot(p1[0] - p2[0], p1[1] - p2[1])
+    """
+    Haversine distance in metres between two (lon, lat) points.
+    """
+    lon1, lat1 = math.radians(p1[0]), math.radians(p1[1])
+    lon2, lat2 = math.radians(p2[0]), math.radians(p2[1])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
+    return 2 * EARTH_R * math.asin(math.sqrt(a))
+
+
+def _lat_aspect(lats):
+    """
+    Returns the aspect ratio 1/cos(mean_lat) to correct lon/lat distortion.
+    """
+    mean_lat = math.radians(sum(lats) / len(lats))
+    return 1.0 / math.cos(mean_lat)
 
 
 def interpolate(p1, p2, t_ratio):
@@ -27,13 +45,6 @@ def interpolate(p1, p2, t_ratio):
 # ===============================
 
 def build_timed_trajectory(route, speed, sample_time=5, extra_waits=None):
-    """
-    extra_waits[k] = extra seconds to hold at route[k] BEFORE departing.
-    Segment order per leg i:
-      1. Hold at route[i]            (extra_waits[i], omitted if 0)
-      2. Travel route[i]→route[i+1]  (dist/speed)
-      3. Sample pause at route[i+1]  (sample_time, omitted on last leg)
-    """
     if extra_waits is None:
         extra_waits = [0.0] * len(route)
 
@@ -64,13 +75,11 @@ def build_timed_trajectory(route, speed, sample_time=5, extra_waits=None):
 # ===============================
 
 def state_at(traj, t):
-    """Returns (position, segment_type) at time t."""
     for seg in traj:
         p1, p2, t1, t2, kind = seg
         if t1 <= t <= t2:
             ratio = (t - t1) / (t2 - t1 + 1e-9)
-            pos = interpolate(p1, p2, ratio)
-            return pos, kind
+            return interpolate(p1, p2, ratio), kind
     return traj[-1][1], "done"
 
 def position_at(traj, t):
@@ -119,7 +128,7 @@ def waypoint_before_collision(route, speed, extra_waits, t_col, sample_time=5):
 
 
 # ===============================
-# Resolve collisions with local waypoint delays
+# Resolve collisions
 # ===============================
 
 def add_delays_to_avoid_collisions(routes, speed, d_safe=2.0,
@@ -160,42 +169,57 @@ def add_delays_to_avoid_collisions(routes, speed, d_safe=2.0,
 # Animation
 # ===============================
 
-def animate_trajectories(trajectories, dt=0.5, trail_length=30,
+def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
                           speed_multiplier=8):
-    # End when the last drone completes its final TRAVEL move, not any trailing holds
     t_start = 0.0
-    t_end   = max(
-        seg[3] for traj in trajectories
-        for seg in traj if seg[4] == "travel"
-    )
+    t_end   = max(seg[3] for traj in trajectories for seg in traj)
     total_duration = t_end - t_start
 
     interval_ms = max(16, int(1000 * dt / speed_multiplier))
     times = np.arange(t_start, t_end + dt, dt)
-
-    print(f"Sim duration: {total_duration:.1f}s | Frames: {len(times)} | "
-          f"Interval: {interval_ms}ms | {speed_multiplier}x speed")
 
     all_states = [
         [state_at(traj, t) for t in times]
         for traj in trajectories
     ]
 
-    # ── Figure ────────────────────────────────────────────────────────────────
+    # ── Figure Setup ──────────────────────────────────────────────────────────
+    
+    # Use the original route waypoints to determine the bounding box
+    raw_points = [pt for route in routes for pt in route]
+    all_x = [pt[0] for pt in raw_points]
+    all_y = [pt[1] for pt in raw_points]
+
+    min_x, max_x = min(all_x), max(all_x)
+    min_y, max_y = min(all_y), max(all_y)
+
+    # Padding: 10% ensures markers aren't clipped at the edge
+    range_x = (max_x - min_x) if max_x != min_x else 0.001
+    range_y = (max_y - min_y) if max_y != min_y else 0.001
+    pad_x = range_x * 0.10
+    pad_y = range_y * 0.10
+
     fig, (ax, ax_bar) = plt.subplots(
-        1, 2, figsize=(11, 6),
-        gridspec_kw={"width_ratios": [14, 1]}
+        1, 2, figsize=(11, 8),
+        gridspec_kw={"width_ratios": [20, 1]}
     )
-    fig.subplots_adjust(left=0.07, right=0.97, wspace=0.12)
+    fig.subplots_adjust(left=0.1, right=0.95, bottom=0.15)
 
     ax.set_title("Drone Trajectories (Top View)")
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    all_x = [s[0][0] for states in all_states for s in states]
-    all_y = [s[0][1] for states in all_states for s in states]
-    ax.set_xlim(min(all_x) - 5, max(all_x) + 5)
-    ax.set_ylim(min(all_y) - 5, max(all_y) + 5)
-    ax.set_aspect("equal")
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    
+    # Set static limits based on all potential waypoints
+    ax.set_xlim(min_x - pad_x, max_x + pad_x)
+    ax.set_ylim(min_y - pad_y, max_y + pad_y)
+
+    # Correct aspect ratio so 1m North looks like 1m East
+    ax.set_aspect(_lat_aspect(all_y), adjustable="box")
+
+    # Formatting
+    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.5f}°"))
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.5f}°"))
+    plt.setp(ax.get_xticklabels(), rotation=15, ha="right", fontsize=8)
 
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     points, trails, rings = [], [], []
@@ -203,7 +227,6 @@ def animate_trajectories(trajectories, dt=0.5, trail_length=30,
         c = colors[k % len(colors)]
         pt, = ax.plot([], [], "o", color=c, ms=8, zorder=5)
         tr, = ax.plot([], [], "-", color=c, lw=1.5, alpha=0.6)
-        # Hollow ring shown while drone is holding
         rg, = ax.plot([], [], "o", color=c, ms=18, zorder=4,
                       markerfacecolor="none", markeredgewidth=1.5, alpha=0.5)
         points.append(pt)
@@ -216,37 +239,25 @@ def animate_trajectories(trajectories, dt=0.5, trail_length=30,
     ax_bar.set_xticks([])
     ax_bar.set_yticks([])
     ax_bar.set_title("Time", fontsize=9)
-    for spine in ax_bar.spines.values():
-        spine.set_visible(False)
-
-    ax_bar.add_patch(mpatches.Rectangle((0.2, 0), 0.6, 1.0,
-                                         fc="#e0e0e0", ec="#aaaaaa", lw=0.8))
-    bar_fill = mpatches.Rectangle((0.2, 0), 0.6, 0.0, fc="#2196F3", ec="none")
+    ax_bar.add_patch(mpatches.Rectangle((0.2, 0), 0.6, 1.0, fc="#e0e0e0", ec="#aaaaaa"))
+    bar_fill = mpatches.Rectangle((0.2, 0), 0.6, 0.0, fc="#2196F3")
     ax_bar.add_patch(bar_fill)
-
-    pct_text = ax_bar.text(0.5, -0.04, "0%", ha="center", va="top", fontsize=9)
-    ax_bar.text(0.5,  1.03, f"{t_end:.0f}s",   ha="center", va="bottom",
-                fontsize=7, color="#666")
-    ax_bar.text(0.5, -0.12, f"{t_start:.0f}s", ha="center", va="bottom",
-                fontsize=7, color="#666")
+    pct_text = ax_bar.text(0.5, -0.05, "0%", ha="center", va="top", fontsize=9)
 
     def update(frame):
         for i, states in enumerate(all_states):
             pos, kind = states[frame]
             x, y = pos
             points[i].set_data([x], [y])
-
             s = max(0, frame - trail_length)
             trails[i].set_data([states[k][0][0] for k in range(s, frame)],
                                [states[k][0][1] for k in range(s, frame)])
-
-            # Show ring when holding, hide otherwise
             if kind == "hold":
                 rings[i].set_data([x], [y])
             else:
                 rings[i].set_data([], [])
 
-        progress = (times[frame] - t_start) / total_duration
+        progress = (times[frame] - t_start) / total_duration if total_duration > 0 else 1
         bar_fill.set_height(min(progress, 1.0))
         pct_text.set_text(f"{progress * 100:.0f}%")
 
@@ -255,22 +266,15 @@ def animate_trajectories(trajectories, dt=0.5, trail_length=30,
     plt.show()
 
 
-# ===============================
-# Example usage
-# ===============================
-
 if __name__ == "__main__":
-    # NOTE: routes 2 and 3 previously shared waypoints (30,10) and (70,10)
-    # which forced drone 3 to accumulate hundreds of seconds of hold time.
-    # Staggered here so no two routes share an exact waypoint.
     routes = [
-        [(0,  0),  (20, 20), (40,  0), (60, 20)],
-        [(0,  20), (20,  0), (40, 20), (60,  0)],
-        [(10, -5), (30, 15), (50, -5), (70, 15)],
-        [(10, 25), (30,  5), (50, 25), (70,  5)],
+        [(-71.2633, 42.2915), (-71.2620, 42.2908), (-71.2615, 42.2920)],
+        [(-71.2628, 42.2910), (-71.2625, 42.2918), (-71.2618, 42.2912)],
+        [(-71.2630, 42.2922), (-71.2617, 42.2913), (-71.2622, 42.2905)],
     ]
 
-    speed = 2.0
-
-    trajectories, all_waits = add_delays_to_avoid_collisions(routes, speed)
-    animate_trajectories(trajectories, speed_multiplier=8)
+    speed = 5.0 
+    trajectories, all_waits = add_delays_to_avoid_collisions(routes, speed, d_safe=3.0)
+    
+    # Pass 'routes' explicitly so the plot knows the full boundary
+    animate_trajectories(trajectories, routes, speed_multiplier=8)

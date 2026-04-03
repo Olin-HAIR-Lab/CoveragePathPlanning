@@ -11,7 +11,8 @@ from vehicleRoutingProblem import (
     extract_paths
 )
 from collisionAvoidance import (
-    add_delays_to_avoid_collisions
+    add_delays_to_avoid_collisions,
+    animate_trajectories
 )
 from plotting import plot_results
 from jsonTesting import makeJSONMission
@@ -107,8 +108,6 @@ time_windows = np.array([
 
 solution = solve_vrp_unlimited(coords, time_windows, travel_duration_matrix)
 #solution = solve_vrp_balanced(coords, time_windows, travel_duration_matrix, num_vehicles=3)
-# solution = solve_vrp_unlimited(coords, time_windows, travel_duration_matrix)
-solution2 = solve_vrp_balanced(coords, time_windows, travel_duration_matrix, num_vehicles=3)
 
 paths, routes = extract_paths(solution, coords)
 
@@ -118,11 +117,8 @@ for route in routes:
     route_coords = [coords[i] for i in route]  # map node indices to coordinates
     routes_coords.append(route_coords)
 
-
-d_safe = 2.0  # meters
-
-trajectories, delays = add_delays_to_avoid_collisions(routes_coords, speed=5, d_safe=d_safe)
-print("Delays applied:", delays)
+# Collision Detection
+trajectories, delays = add_delays_to_avoid_collisions(routes_coords, speed=5, d_safe=3)
 
 # JSON output
 # makeJSONMission("output.json", *paths[:3])
@@ -130,5 +126,5 @@ print("Delays applied:", delays)
 # Plot
 plot_results(poly, final_tessellation, coords, solution)
 
-# plot_results(poly, final_tessellation, coords, solution)
-plot_results(poly, final_tessellation, routes_coords, solution2)
+# Animation
+animate_trajectories(trajectories, routes_coords, speed_multiplier=8)
