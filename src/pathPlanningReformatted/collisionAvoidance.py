@@ -212,6 +212,11 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
 
     # ── Figure Setup ──────────────────────────────────────────────────────────
     raw_points = [pt for route in routes for pt in route]
+    if map_coords is not None:
+        raw_points.extend(map_coords.tolist())
+    if poly is not None:
+        raw_points.extend(poly.exterior.coords)
+
     all_x = []
     all_y = []
     for pt in raw_points:
@@ -224,8 +229,9 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
 
     range_x = (max_x - min_x) if max_x != min_x else 0.001
     range_y = (max_y - min_y) if max_y != min_y else 0.001
-    pad_x = range_x * 0.10
-    pad_y = range_y * 0.10
+    pad = max(range_x, range_y) * 0.12
+    pad_x = pad
+    pad_y = pad
 
     fig, (ax, ax_bar) = plt.subplots(
         1, 2, figsize=(11, 8),
