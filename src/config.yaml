@@ -33,7 +33,7 @@ lloyd:
   seed: 6
   # Set to null to auto-compute N from mission parameters;
   # set to an integer to override (useful during testing)
-  n_dots_override: Null
+  n_dots_override: null
 
 # ── VRP ───────────────────────────────────────────────────────────────────────
 vrp:
