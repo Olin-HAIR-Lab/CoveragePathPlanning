@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 from matplotlib.animation import FuncAnimation
+from scipy.spatial import ConvexHull
+from shapely.geometry import Polygon as ShapelyPolygon
 
 
 # ===============================
@@ -170,7 +172,10 @@ def add_delays_to_avoid_collisions(routes, speed, d_safe=2.0,
 # ===============================
 
 def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
-                          speed_multiplier=8):
+                          speed_multiplier=8,
+                          poly=None, tessellation=None,
+                          map_coords=None, solution=None):
+
     t_start = 0.0
     t_end   = max(seg[3] for traj in trajectories for seg in traj)
     total_duration = t_end - t_start
@@ -184,8 +189,6 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
     ]
 
     # ── Figure Setup ──────────────────────────────────────────────────────────
-    
-    # Use the original route waypoints to determine the bounding box
     raw_points = [pt for route in routes for pt in route]
     all_x = [pt[0] for pt in raw_points]
     all_y = [pt[1] for pt in raw_points]
@@ -193,7 +196,6 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
     min_x, max_x = min(all_x), max(all_x)
     min_y, max_y = min(all_y), max(all_y)
 
-    # Padding: 10% ensures markers aren't clipped at the edge
     range_x = (max_x - min_x) if max_x != min_x else 0.001
     range_y = (max_y - min_y) if max_y != min_y else 0.001
     pad_x = range_x * 0.10
@@ -208,18 +210,48 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
     ax.set_title("Drone Trajectories (Top View)")
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
-    
-    # Set static limits based on all potential waypoints
     ax.set_xlim(min_x - pad_x, max_x + pad_x)
     ax.set_ylim(min_y - pad_y, max_y + pad_y)
-
-    # Correct aspect ratio so 1m North looks like 1m East
     ax.set_aspect(_lat_aspect(all_y), adjustable="box")
-
-    # Formatting
     ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.5f}°"))
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.5f}°"))
     plt.setp(ax.get_xticklabels(), rotation=15, ha="right", fontsize=8)
+
+    # ── Static map background ──────────────────────────────────────────────
+    if poly is not None:
+        x_poly, y_poly = poly.exterior.xy
+        ax.plot(x_poly, y_poly, 'k-', linewidth=2, zorder=1)
+
+    if tessellation is not None and poly is not None:
+        for k in tessellation:
+            pts = np.array(tessellation[k])
+            if len(pts) < 3:
+                continue
+            hull = ConvexHull(pts)
+            cell_poly = ShapelyPolygon(pts[hull.vertices]).intersection(poly)
+            if cell_poly.is_empty:
+                continue
+            regions = ([cell_poly] if isinstance(cell_poly, ShapelyPolygon)
+                       else list(cell_poly.geoms))
+            for region in regions:
+                x_reg, y_reg = region.exterior.xy
+                ax.fill(x_reg, y_reg, alpha=0.3, zorder=1)
+
+    if map_coords is not None:
+        ax.scatter(map_coords[:, 0], map_coords[:, 1],
+                   c='black', s=40, zorder=2)
+        ax.scatter(map_coords[0][0], map_coords[0][1],
+                   c='red', s=250, marker='*', zorder=3)
+
+    if solution is not None and map_coords is not None:
+        route_colors = ['blue', 'green', 'purple', 'orange']
+        for r_idx, route in enumerate(solution.routes()):
+            route_indices = [0] + list(route) + [0]
+            xs = [map_coords[i][0] for i in route_indices]
+            ys = [map_coords[i][1] for i in route_indices]
+            ax.plot(xs, ys, color=route_colors[r_idx % len(route_colors)],
+                    linewidth=1.5, alpha=0.4, zorder=2)
+    # ── End static map background ──────────────────────────────────────────
 
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     points, trails, rings = [], [], []
@@ -273,8 +305,6 @@ if __name__ == "__main__":
         [(-71.2630, 42.2922), (-71.2617, 42.2913), (-71.2622, 42.2905)],
     ]
 
-    speed = 5.0 
+    speed = 5.0
     trajectories, all_waits = add_delays_to_avoid_collisions(routes, speed, d_safe=3.0)
-    
-    # Pass 'routes' explicitly so the plot knows the full boundary
     animate_trajectories(trajectories, routes, speed_multiplier=8)

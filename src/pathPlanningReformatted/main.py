@@ -65,7 +65,7 @@ N_dots = compute_sample_count(
     num_agents=3
 )
 
-N_dots = 9
+N_dots = 15
 # N_dots = 30
 
 iterations = 10
@@ -81,12 +81,19 @@ history_tessell, history_dots = Lloyd_algoritm(
 final_tessellation = history_tessell[-1]
 final_dots = history_dots[-1]
 
+
+
+
 # ================= VRP =================
 
 minx, miny, maxx, maxy = poly.bounds
 map_width = maxx - minx
 map_height = maxy - miny
-depot_coord = np.array([(minx+maxx)/2, (miny + maxy)/2 - map_height])
+depot_coord = np.array([(minx+maxx)/2 - map_width*0.25, (miny + maxy)/2 - map_height])
+
+# depot_coord1 = np.array([42.29146,-71.26296])
+# depot_coord2 = np.array([42.29146,-71.26292])
+# depot_coord3 = np.array([42.29146,-71.26288])
 
 coords = np.vstack([depot_coord, final_dots.copy()])
 
@@ -108,6 +115,8 @@ time_windows = np.array([
     for i in range(len(coords))
 ])
 
+
+
 # ===== CHOOSE MODE =====
 
 # Recharge
@@ -121,22 +130,34 @@ paths, routes = extract_paths(solution, coords)
 
 # coords: list of (x, y) or (lon, lat)
 routes_coords = []
+routes_coords_3d = []  # NEW: same structure but with z=3
 for r_idx, route in enumerate(solution.routes()):
     route_indices = [0] + list(route) + [0]
-
-    coords[0][0] += map_height*0.1
-
+    coords[0][0] += map_height*0.3
+    # coords[0][0] += 0.00004
     route_coords = [copy.copy(coords[i]) for i in route_indices]
     routes_coords.append(route_coords)
+    
+    # Build the 3D version by appending z=3 to each point
+    route_coords_3d = [np.append(copy.copy(coords[i]), 3) for i in route_indices]  # NEW
+    routes_coords_3d.append(route_coords_3d)
 
 # Collision Detection
-trajectories, delays = add_delays_to_avoid_collisions(routes_coords, speed=5, d_safe=3)
+trajectories, delays = add_delays_to_avoid_collisions(routes_coords, speed=5, d_safe=20)
 
 # JSON output
-# makeJSONMission("output.json", *paths[:3])
+makeJSONMission("output.json", *routes_coords_3d[:3])
 
 # Plot
-plot_results(poly, final_tessellation, coords, solution)
+# plot_results(poly, final_tessellation, coords, solution)
 
 # Animation
-animate_trajectories(trajectories, routes_coords, speed_multiplier=8)
+animate_trajectories(
+    trajectories,
+    routes_coords,
+    speed_multiplier=8,
+    poly=poly,
+    tessellation=final_tessellation,
+    map_coords=coords,
+    solution=solution,
+)

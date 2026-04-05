@@ -15,20 +15,13 @@ def makeJSONMission(file_path, path1=None, path2=None, path3=None):
     for key, path in zip(drone_keys, paths):
         if path:
             data[key]["waypoints"] = [
-                {"lat": point.x, "lon": point.y, "alt": point.z}
+                {"lat": point[0], "lon": point[1], "alt": point[2], "type": "sample"}
                 for point in path
             ]
+    
+    for key in drone_keys: 
+        data[key]["waypoints"][0]["type"] = "depot"
+        data[key]["waypoints"][-1]["type"] = "depot"
 
     with open(file_path, 'w') as json_file:
         json.dump(data, json_file, indent=4)
-
-
-if __name__ == "__main__":
-    path1 = [Point(42.292506, -71.262602, 3.0), Point(42.292432, -71.262597, 3.0)]
-    path2 = [Point(42.292699, -71.262827, 3.0), Point(42.292588, -71.262906, 3.0)]
-    path3 = [Point(42.292100, -71.262500, 3.0), Point(42.292200, -71.262400, 3.0)]
-
-    # Test with 3 drones
-    makeJSONMission("test_3drone.json", path1, path2, path3)
-    print("\n3 drone output:")
-    print(json.dumps(json.load(open("test_3drone.json")), indent=4))

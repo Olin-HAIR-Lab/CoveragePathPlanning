@@ -11,6 +11,7 @@ def build_vrp_model(coords, time_windows, travel_duration_matrix,
     m = pyvrp.Model()
 
     if mode == "multi":
+
         m.add_vehicle_type(
             max_vehicles,
             unit_distance_cost=0,
@@ -25,20 +26,19 @@ def build_vrp_model(coords, time_windows, travel_duration_matrix,
                 service_duration=service_time,
                 name=f"Client {idx}",
             )
+
     elif mode == "single":
         m.add_vehicle_type(
             max_vehicles,
             capacity=capacity,
             unit_distance_cost=0,
-            unit_duration_cost=1000,
+            unit_duration_cost=1,
             fixed_cost=fixed_cost
         )
         for idx in range(1, len(coords)):
             m.add_client(
                 x=coords[idx][0],
                 y=coords[idx][1],
-                tw_early=time_windows[idx][0],
-                tw_late=time_windows[idx][1],
                 service_duration=service_time,
                 name=f"Client {idx}",
                 delivery=1
@@ -47,8 +47,6 @@ def build_vrp_model(coords, time_windows, travel_duration_matrix,
     m.add_depot(
         x=coords[0][0],
         y=coords[0][1],
-        tw_early=time_windows[0][0],
-        tw_late=time_windows[0][1],
         name="Depot",
     )
 
