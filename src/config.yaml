@@ -4,7 +4,7 @@ mission:
   mission_time: 900          # seconds — total battery life per drone
   sample_time: 180           # seconds — time spent at each sampling point
   speed: 5.0                 # m/s — drone cruise speed
-  d_safe: 20.0               # metres — minimum separation for collision avoidance
+  d_safe: 5.0               # metres — minimum separation for collision avoidance
 
 # ── Polygon (lat/lon vertices, closed ring not required) ──────────────────────
 polygon:
@@ -16,6 +16,10 @@ polygon:
 
 # ── Depot ─────────────────────────────────────────────────────────────────────
 depot:
+  # Whether offset from center or directly coordinate based
+  mode: coordinate
+  depot_x: 42.29191053590485
+  depot_y: -71.2623943948142
   # Offset from polygon centre as fractions of map_width / map_height
   offset_x: -0.25           # negative = left of centre
   offset_y: -1.0            # negative = below centre
@@ -29,7 +33,7 @@ lloyd:
   seed: 6
   # Set to null to auto-compute N from mission parameters;
   # set to an integer to override (useful during testing)
-  n_dots_override: None
+  n_dots_override: Null
 
 # ── VRP ───────────────────────────────────────────────────────────────────────
 vrp:
@@ -39,7 +43,7 @@ vrp:
 # ── Output ────────────────────────────────────────────────────────────────────
 output:
   json_file: output.json     # set to null to skip JSON export
-  drone_altitude: 3          # metres — z value appended to each 3-D waypoint
+  drone_altitude: 6          # metres — z value appended to each 3-D waypoint
 
 # ── Plotting / Animation ──────────────────────────────────────────────────────
 animation:

@@ -30,8 +30,13 @@ def load_config(path=None):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def polygon_area_m2(poly_latlon):
-    transformer = Transformer.from_crs("EPSG:4326", "EPSG:32619", always_xy=True)
-    poly_utm = transform(transformer.transform, poly_latlon)
+    transformer = Transformer.from_crs(
+        "EPSG:4326", "EPSG:32619", always_xy=True)
+
+    def _swap_xy(x, y, z=None):
+        return transformer.transform(y, x)
+
+    poly_utm = transform(_swap_xy, poly_latlon)
     return poly_utm.area
 
 
@@ -43,7 +48,8 @@ def compute_sample_count(map, sample_time, speed, mission_time, num_agents=1):
         if N % num_agents != 0:
             continue
         N_per_agent = N / num_agents
-        total_time = N_per_agent * sample_time + math.sqrt(area * N_per_agent) / speed
+        total_time = N_per_agent * sample_time + \
+            math.sqrt(area * N_per_agent) / speed
         if total_time <= mission_time:
             best_N = N
         else:
@@ -56,18 +62,18 @@ def compute_sample_count(map, sample_time, speed, mission_time, num_agents=1):
 def main():
     cfg = load_config()
 
-    m   = cfg["mission"]
-    ll  = cfg["lloyd"]
-    v   = cfg["vrp"]
-    d   = cfg["depot"]
+    m = cfg["mission"]
+    ll = cfg["lloyd"]
+    v = cfg["vrp"]
+    d = cfg["depot"]
     out = cfg["output"]
     ani = cfg["animation"]
 
-    num_agents   = m["num_agents"]
+    num_agents = m["num_agents"]
     mission_time = m["mission_time"]
-    sample_time  = m["sample_time"]
-    speed        = m["speed"]
-    d_safe       = m["d_safe"]
+    sample_time = m["sample_time"]
+    speed = m["speed"]
+    d_safe = m["d_safe"]
 
     # ── Polygon ───────────────────────────────────────────────────────────────
     poly = Polygon([tuple(pt) for pt in cfg["polygon"]["vertices"]])
@@ -91,18 +97,22 @@ def main():
         ll["iterations"], N_dots, poly, ll["partition"], ll["seed"]
     )
     final_tessellation = history_tessell[-1]
-    final_dots         = history_dots[-1]
+    final_dots = history_dots[-1]
 
-    # ── VRP ───────────────────────────────────────────────────────────────────
+    # ── Depot Coordinate ──────────────────────────────────────────────────────
     minx, miny, maxx, maxy = poly.bounds
-    map_width  = maxx - minx
+    map_width = maxx - minx
     map_height = maxy - miny
 
-    depot_coord = np.array([
-        (minx + maxx) / 2 + d["offset_x"] * map_width,
-        (miny + maxy) / 2 + d["offset_y"] * map_height,
-    ])
+    if d["mode"] == "offset":
+        depot_coord = np.array([
+            (minx + maxx) / 2 + d["offset_x"] * map_width,
+            (miny + maxy) / 2 + d["offset_y"] * map_height,
+        ])
+    elif d["mode"] == "coordinate":
+        depot_coord = np.array([d["depot_x"],d["depot_y"]])
 
+    # ── VRP ───────────────────────────────────────────────────────────────────
     coords = np.vstack([depot_coord, final_dots.copy()])
 
     travel_duration_matrix = np.array([
@@ -124,21 +134,23 @@ def main():
             coords, time_windows, travel_duration_matrix, num_vehicles=num_agents
         )
     elif v["mode"] == "unlimited":
-        solution = solve_vrp_unlimited(coords, time_windows, travel_duration_matrix)
+        solution = solve_vrp_unlimited(
+            coords, time_windows, travel_duration_matrix)
     else:
-        raise ValueError(f"Unknown VRP mode: '{v['mode']}'. Use 'balanced' or 'unlimited'.")
+        raise ValueError(
+            f"Unknown VRP mode: '{v['mode']}'. Use 'balanced' or 'unlimited'.")
 
     paths, routes = extract_paths(solution, coords)
 
     # ── Build per-route coordinate lists (2-D and 3-D) ───────────────────────
-    routes_coords    = []
+    routes_coords = []
     routes_coords_3d = []
 
     for route in solution.routes():
         route_indices = [0] + list(route) + [0]
-        coords[0][0] += map_height * d["route_x_nudge"]
+        coords[0][0] += map_width * d["route_x_nudge"]
 
-        route_coords    = [copy.copy(coords[i]) for i in route_indices]
+        route_coords = [copy.copy(coords[i]) for i in route_indices]
         route_coords_3d = [np.append(copy.copy(coords[i]), out["drone_altitude"])
                            for i in route_indices]
 
@@ -156,7 +168,8 @@ def main():
 
     # ── Static plot (optional) ────────────────────────────────────────────────
     if ani["show_static_plot"]:
-        plot_results(poly, final_tessellation, coords, solution)
+        plot_results(poly, final_tessellation, coords, solution,
+                     coord_order="latlon")
 
     # ── Animation ─────────────────────────────────────────────────────────────
     animate_trajectories(
@@ -167,6 +180,7 @@ def main():
         tessellation=final_tessellation,
         map_coords=coords,
         solution=solution,
+        coord_order="latlon",
     )
 
 
