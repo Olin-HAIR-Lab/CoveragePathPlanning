@@ -1,0 +1,47 @@
+# ── Mission Parameters ────────────────────────────────────────────────────────
+mission:
+  num_agents: 3
+  mission_time: 900          # seconds — total battery life per drone
+  sample_time: 180           # seconds — time spent at each sampling point
+  speed: 5.0                 # m/s — drone cruise speed
+  d_safe: 20.0               # metres — minimum separation for collision avoidance
+
+# ── Polygon (lat/lon vertices, closed ring not required) ──────────────────────
+polygon:
+  vertices:
+    - [-71.2633943948142,  42.29151053590485]
+    - [-71.2628929214584,  42.290784490885386]
+    - [-71.26149845009414, 42.291353821977765]
+    - [-71.26200796847752, 42.29205010492521]
+
+# ── Depot ─────────────────────────────────────────────────────────────────────
+depot:
+  # Offset from polygon centre as fractions of map_width / map_height
+  offset_x: -0.25           # negative = left of centre
+  offset_y: -1.0            # negative = below centre
+  # Per-drone x-nudge applied when building each route's coord list
+  route_x_nudge: 0.3        # multiplied by map_height each iteration
+
+# ── Lloyd's Algorithm ─────────────────────────────────────────────────────────
+lloyd:
+  iterations: 10
+  partition: 300
+  seed: 6
+  # Set to null to auto-compute N from mission parameters;
+  # set to an integer to override (useful during testing)
+  n_dots_override: None
+
+# ── VRP ───────────────────────────────────────────────────────────────────────
+vrp:
+  # "balanced" = fixed fleet, no recharge | "unlimited" = recharge allowed
+  mode: balanced
+
+# ── Output ────────────────────────────────────────────────────────────────────
+output:
+  json_file: output.json     # set to null to skip JSON export
+  drone_altitude: 3          # metres — z value appended to each 3-D waypoint
+
+# ── Plotting / Animation ──────────────────────────────────────────────────────
+animation:
+  speed_multiplier: 8
+  show_static_plot: false    # set to true to also show the plot_results figure
