@@ -110,7 +110,7 @@ def main():
             (miny + maxy) / 2 + d["offset_y"] * map_height,
         ])
     elif d["mode"] == "coordinate":
-        depot_coord = np.array([d["depot_x"],d["depot_y"]])
+        depot_coord = np.array([d["depot1_x"],d["depot1_y"]])
 
     # ── VRP ───────────────────────────────────────────────────────────────────
     coords = np.vstack([depot_coord, final_dots.copy()])
@@ -145,10 +145,11 @@ def main():
     # ── Build per-route coordinate lists (2-D and 3-D) ───────────────────────
     routes_coords = []
     routes_coords_3d = []
+    i = 1
 
     for route in solution.routes():
         route_indices = [0] + list(route) + [0]
-        coords[0][0] += map_width * d["route_x_nudge"]
+        coords[0] = np.array([d[f"depot{i}_x"],d[f"depot{i}_y"]]) 
 
         route_coords = [copy.copy(coords[i]) for i in route_indices]
         route_coords_3d = [np.append(copy.copy(coords[i]), out["drone_altitude"])
@@ -156,6 +157,8 @@ def main():
 
         routes_coords.append(route_coords)
         routes_coords_3d.append(route_coords_3d)
+
+        i += 1
 
     # ── Collision avoidance ───────────────────────────────────────────────────
     trajectories, delays = add_delays_to_avoid_collisions(
