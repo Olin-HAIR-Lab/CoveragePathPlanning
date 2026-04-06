@@ -1,0 +1,8 @@
+Start drones -> Switch to Waypoint
+functions run them with delays
+-> Test with different timing offsets
+
+why no px4
+
+Make they don't overlap for video
+Multi-depots

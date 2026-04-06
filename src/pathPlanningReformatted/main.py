@@ -2,6 +2,7 @@ import math
 import copy
 import os
 import yaml
+import pickle
 import numpy as np
 from shapely.geometry import Polygon
 from shapely.ops import transform
@@ -93,9 +94,20 @@ def main():
         print(f"[config] N_dots computed = {N_dots}")
 
     # ── Lloyd's Algorithm ─────────────────────────────────────────────────────
-    history_tessell, history_dots = Lloyd_algoritm(
-        ll["iterations"], N_dots, poly, ll["partition"], ll["seed"]
-    )
+    CACHE_FILE = f"lloyd_cache_N{1}_iter{1}_part{1}_seed{1}.pkl"
+
+    if os.path.exists(CACHE_FILE):
+        print(f"Loading Lloyd cache from {CACHE_FILE}")
+        with open(CACHE_FILE, "rb") as f:
+            history_tessell, history_dots = pickle.load(f)
+    else:
+        history_tessell, history_dots = Lloyd_algoritm(
+            ll["iterations"], N_dots, poly, ll["partition"], ll["seed"]
+        )
+        with open(CACHE_FILE, "wb") as f:
+            pickle.dump((history_tessell, history_dots), f)
+        print(f"Lloyd result cached to {CACHE_FILE}")
+    
     final_tessellation = history_tessell[-1]
     final_dots = history_dots[-1]
 
