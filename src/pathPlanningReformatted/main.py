@@ -17,6 +17,7 @@ from vehicleRoutingProblem import (
 from collisionAvoidance import add_delays_to_avoid_collisions, animate_trajectories
 from plotting import plot_results
 from jsonTesting import makeJSONMission
+from datetime import datetime
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -189,6 +190,11 @@ def main():
                      coord_order="latlon")
 
     # ── Animation ─────────────────────────────────────────────────────────────
+    os.makedirs("animation_output", exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_path = f"animation_output/trajectories_{timestamp}.gif"
+
     animate_trajectories(
         trajectories,
         routes_coords,
@@ -198,8 +204,10 @@ def main():
         map_coords=coords,
         solution=solution,
         coord_order="latlon",
+        save_path=save_path,
         d=d
     )
+    
 
 
 if __name__ == "__main__":
