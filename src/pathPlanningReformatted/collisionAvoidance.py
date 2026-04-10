@@ -196,7 +196,8 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
                          speed_multiplier=8,
                          poly=None, tessellation=None,
                          map_coords=None, solution=None,
-                         coord_order="latlon"):
+                         coord_order="latlon", 
+                         save_path = None):
 
     t_start = 0.0
     t_end = max(seg[3] for traj in trajectories for seg in traj)
@@ -359,6 +360,8 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
 
     ani = FuncAnimation(fig, update, frames=len(times),
                         interval=interval_ms, blit=False, repeat=False)
+    if save_path:
+        ani.save(save_path, writer="pillow", fps=20)
     plt.show()
 
 
