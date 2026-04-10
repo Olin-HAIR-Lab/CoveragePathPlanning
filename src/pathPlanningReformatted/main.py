@@ -117,15 +117,17 @@ def main():
     map_height = maxy - miny
 
     if d["mode"] == "offset":
-        depot_coord = np.array([
+        depot1_coord = np.array([
             (minx + maxx) / 2 + d["offset_x"] * map_width,
             (miny + maxy) / 2 + d["offset_y"] * map_height,
         ])
     elif d["mode"] == "coordinate":
-        depot_coord = np.array([d["depot1_x"],d["depot1_y"]])
+        depot1_coord = np.array([d["depot1_x"],d["depot1_y"]])
+        depot2_coord = np.array([d["depot2_x"],d["depot2_y"]])
+        depot3_coord = np.array([d["depot3_x"],d["depot3_y"]])
 
     # ── VRP ───────────────────────────────────────────────────────────────────
-    coords = np.vstack([depot_coord, final_dots.copy()])
+    coords = np.vstack([depot1_coord, depot2_coord, depot3_coord, final_dots.copy()])
 
     travel_duration_matrix = np.array([
         [np.hypot(coords[i][0] - coords[j][0], coords[i][1] - coords[j][1])
@@ -196,6 +198,7 @@ def main():
         map_coords=coords,
         solution=solution,
         coord_order="latlon",
+        d=d
     )
 
 

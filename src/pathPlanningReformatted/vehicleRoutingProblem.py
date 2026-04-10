@@ -10,14 +10,32 @@ def build_vrp_model(coords, time_windows, travel_duration_matrix,
     
     m = pyvrp.Model()
 
-    if mode == "multi":
+    m.add_depot(
+        x=coords[0][0],
+        y=coords[0][1],
+        name="Depot1",
+    )
+    m.add_depot(
+        x=coords[1][0],
+        y=coords[1][1],
+        name="Depot2",
+    )
+    m.add_depot(
+        x=coords[2][0],
+        y=coords[2][1],
+        name="Depot3",
+    )
+
+    num_depots = len(m._depots)
+
+    if mode == "unlimited":
 
         m.add_vehicle_type(
             max_vehicles,
             unit_distance_cost=0,
             unit_duration_cost=1,
         )
-        for idx in range(1, len(coords)):
+        for idx in range(num_depots, len(coords)):
             m.add_client(
                 x=coords[idx][0],
                 y=coords[idx][1],
@@ -27,15 +45,18 @@ def build_vrp_model(coords, time_windows, travel_duration_matrix,
                 name=f"Client {idx}",
             )
 
-    elif mode == "single":
-        m.add_vehicle_type(
-            max_vehicles,
-            capacity=capacity,
-            unit_distance_cost=0,
-            unit_duration_cost=1,
-            fixed_cost=fixed_cost
-        )
-        for idx in range(1, len(coords)):
+    elif mode == "balanced":
+        for idx in range(max_vehicles):
+            m.add_vehicle_type(
+                1,
+                capacity=capacity,
+                unit_distance_cost=0,
+                unit_duration_cost=1,
+                fixed_cost=fixed_cost,
+                start_depot=m._depots[idx],
+                end_depot=m._depots[idx]
+            )
+        for idx in range(num_depots, len(coords)):
             m.add_client(
                 x=coords[idx][0],
                 y=coords[idx][1],
@@ -43,12 +64,6 @@ def build_vrp_model(coords, time_windows, travel_duration_matrix,
                 name=f"Client {idx}",
                 delivery=1
             )
-    
-    m.add_depot(
-        x=coords[0][0],
-        y=coords[0][1],
-        name="Depot",
-    )
 
     for i, frm in enumerate(m.locations):
         for j, to in enumerate(m.locations):
@@ -66,7 +81,7 @@ def solve_vrp_unlimited(coords, time_windows, travel_duration_matrix):
         coords,
         time_windows,
         travel_duration_matrix,
-        mode="multi",
+        mode="unlimited",
         max_vehicles=100
     )
 
@@ -78,14 +93,14 @@ def solve_vrp_balanced(coords, time_windows, travel_duration_matrix, num_vehicle
     """
     Evenly distribute points across fixed number of drones
     """
-    num_clients = len(coords) - 1
+    num_clients = len(coords) - 3
     capacity = int(np.ceil(num_clients / num_vehicles))
 
     m = build_vrp_model(
         coords,
         time_windows,
         travel_duration_matrix,
-        mode="single",
+        mode="balanced",
         max_vehicles=num_vehicles,
         capacity=capacity,
         fixed_cost=500

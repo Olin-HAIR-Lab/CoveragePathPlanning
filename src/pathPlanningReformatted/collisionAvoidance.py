@@ -196,7 +196,7 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
                          speed_multiplier=8,
                          poly=None, tessellation=None,
                          map_coords=None, solution=None,
-                         coord_order="latlon"):
+                         coord_order="latlon", d=None):
 
     t_start = 0.0
     t_end = max(seg[3] for traj in trajectories for seg in traj)
@@ -297,17 +297,29 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
                              for pt in map_coords])
         ax.scatter(map_plot[:, 0], map_plot[:, 1],
                    c='black', s=40, zorder=2)
-        ax.scatter(map_plot[0][0], map_plot[0][1],
-                   c='red', s=250, marker='*', zorder=3)
+
 
     if solution is not None and map_coords is not None:
         route_colors = ['blue', 'green', 'purple', 'orange']
+
         for r_idx, route in enumerate(solution.routes()):
             route_indices = [0] + list(route) + [0]
             xs = [map_plot[i][0] for i in route_indices]
             ys = [map_plot[i][1] for i in route_indices]
+
+            xs[0] = d[f"depot{r_idx+1}_y"]
+            xs[-1] = d[f"depot{r_idx+1}_y"]
+            ys[0] = d[f"depot{r_idx+1}_x"]
+            ys[-1] = d[f"depot{r_idx+1}_x"]
+
             ax.plot(xs, ys, color=route_colors[r_idx % len(route_colors)],
                     linewidth=1.5, alpha=0.4, zorder=2)
+    
+    if d is not None:
+        for i in range(3):
+            ax.scatter(d[f"depot{i+1}_y"], d[f"depot{i+1}_x"],
+                c='red', s=250, marker='*', zorder=3)
+        
     # ── End static map background ──────────────────────────────────────────
 
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
