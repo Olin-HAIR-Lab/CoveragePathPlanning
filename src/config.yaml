@@ -1,37 +1,36 @@
 # ── Mission Parameters ────────────────────────────────────────────────────────
 mission:
   num_agents: 3
-  mission_time: 900          # seconds — total battery life per drone
-  sample_time: 180           # seconds — time spent at each sampling point
-  speed: 5.0                 # m/s — drone cruise speed
-  d_safe: 5.0               # metres — minimum separation for collision avoidance
+  mission_time: 900 # seconds — total battery life per drone
+  sample_time: 180 # seconds — time spent at each sampling point
+  speed: 5.0 # m/s — drone cruise speed
+  d_safe: 5.0 # metres — minimum separation for collision avoidance
 
 # ── Polygon (lat/lon vertices, closed ring not required) ──────────────────────
 polygon:
   vertices:
-    - [42.29151053590485, -71.2633943948142]
-    - [42.290784490885386, -71.2628929214584]
-    - [42.291353821977765, -71.26149845009414]
-    - [42.29205010492521, -71.26200796847752]
-
+    - [42.22428187982439, -71.25799270417033]
+    - [42.22402216987305, -71.25757969429816]
+    - [42.22450912515532, -71.25687596239312]
+    - [42.224804713723074, -71.25723590395768]
 # ── Depot ─────────────────────────────────────────────────────────────────────
 depot:
   # Whether offset from center or directly coordinate based
   mode: coordinate
   # Depot 1 coords
-  depot1_x: 42.29171053590485
-  depot1_y: -71.2623943948142
+  depot1_x: 42.224223441986425
+  depot1_y: -71.25787964981136
   # Depot 2 coords
-  depot2_x: 42.29161053590485
-  depot2_y: -71.2626943948142
+  depot2_x: 42.22417382100468
+  depot2_y: -71.25780462351591
   # Depot 3 coords
-  depot3_x: 42.29151053590485
-  depot3_y: -71.2629943948142
+  depot3_x: 42.22411444542027
+  depot3_y: -71.25771928826354
   # Offset from polygon centre as fractions of map_width / map_height
-  offset_x: -0.25           # negative = left of centre
-  offset_y: -1.0            # negative = below centre
+  offset_x: -0.25 # negative = left of centre
+  offset_y: -1.0 # negative = below centre
   # Per-drone x-nudge applied when building each route's coord list
-  route_x_nudge: 0.3        # multiplied by map_height each iteration
+  route_x_nudge: 0.3 # multiplied by map_height each iteration
 
 # ── Lloyd's Algorithm ─────────────────────────────────────────────────────────
 lloyd:
@@ -49,10 +48,10 @@ vrp:
 
 # ── Output ────────────────────────────────────────────────────────────────────
 output:
-  json_file: output.json     # set to null to skip JSON export
-  drone_altitude: 6          # metres — z value appended to each 3-D waypoint
+  json_file: output.json # set to null to skip JSON export
+  drone_altitude: 6 # metres — z value appended to each 3-D waypoint
 
 # ── Plotting / Animation ──────────────────────────────────────────────────────
 animation:
   speed_multiplier: 8
-  show_static_plot: false    # set to true to also show the plot_results figure
+  show_static_plot: true # set to true to also show the plot_results figure
