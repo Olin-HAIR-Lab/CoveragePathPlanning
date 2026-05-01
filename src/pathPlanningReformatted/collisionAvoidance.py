@@ -240,24 +240,25 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
     )
     fig.subplots_adjust(left=0.1, right=0.95, bottom=0.15)
 
-    ax.set_title("Drone Trajectories (Top View)")
+    ax.set_title("Drone Trajectories (Top View)", fontsize=18)
     if coord_order in ("lonlat", "latlon"):
-        ax.set_xlabel("Longitude")
-        ax.set_ylabel("Latitude")
+        ax.set_xlabel("Longitude", fontsize=14)
+        ax.set_ylabel("Latitude", fontsize=14)
         ax.set_aspect(_lat_aspect(all_y), adjustable="box")
         ax.xaxis.set_major_formatter(
             plt.FuncFormatter(lambda v, _: f"{v:.5f}°"))
         ax.yaxis.set_major_formatter(
             plt.FuncFormatter(lambda v, _: f"{v:.5f}°"))
     else:
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
+        ax.set_xlabel("X", fontsize=14)
+        ax.set_ylabel("Y", fontsize=14)
         ax.set_aspect("equal", adjustable="box")
 
     ax.set_xlim(min_x - pad_x, max_x + pad_x)
     ax.set_ylim(min_y - pad_y, max_y + pad_y)
     if coord_order in ("lonlat", "latlon"):
-        plt.setp(ax.get_xticklabels(), rotation=15, ha="right", fontsize=8)
+        plt.setp(ax.get_xticklabels(), rotation=15, ha="right", fontsize=11)
+    ax.tick_params(axis='y', labelsize=11)
 
     # ── Static map background ──────────────────────────────────────────────
     if poly is not None:

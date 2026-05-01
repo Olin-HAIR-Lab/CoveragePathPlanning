@@ -193,7 +193,7 @@ def main():
     os.makedirs("animation_output", exist_ok=True)
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_path = f"animation_output/trajectories_{timestamp}.gif"
+    save_path = f"path_gifs/trajectories_{timestamp}.gif"
 
     animate_trajectories(
         trajectories,

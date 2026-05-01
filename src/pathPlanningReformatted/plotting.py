@@ -8,7 +8,7 @@ def _plot_coords(point, coord_order="lonlat"):
     if coord_order == "lonlat":
         return point[0], point[1]
     if coord_order == "latlon":
-        return point[1], point[0]
+        return point[0], point[1]
     if coord_order == "xy":
         return point[0], point[1]
     raise ValueError(f"Unknown coord_order: {coord_order}")
@@ -80,6 +80,10 @@ def plot_results(poly, tessellation, coords, solution, coord_order="lonlat"):
 
         plt.plot(xs, ys, color=colors[r_idx % len(colors)], linewidth=2)
 
-    plt.title("Final Lloyd + VRP Routes")
+    plt.title("Drone Trajectories (Top View)", fontsize=18)
+    plt.xlabel("Latitude", fontsize=14)
+    plt.ylabel("Longitude", fontsize=14)
     plt.axis('equal')
+    plt.gca().xaxis.set_major_formatter(plt.FormatStrFormatter('%.5f'))
+    plt.gca().yaxis.set_major_formatter(plt.FormatStrFormatter('%.5f'))
     plt.show()
