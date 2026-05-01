@@ -17,15 +17,11 @@ polygon:
 depot:
   # Whether offset from center or directly coordinate based
   mode: coordinate
-  # Depot 1 coords
-  depot1_x: 42.224223441986425
-  depot1_y: -71.25787964981136
-  # Depot 2 coords
-  depot2_x: 42.22417382100468
-  depot2_y: -71.25780462351591
-  # Depot 3 coords
-  depot3_x: 42.22411444542027
-  depot3_y: -71.25771928826354
+  # Depot coords (depot amount should match num_agents)
+  depots: 
+    - [42.224223441986425, -71.25787964981136]
+    - [42.22417382100468, -71.25780462351591]
+    - [42.22411444542027, -71.25771928826354]
   # Offset from polygon centre as fractions of map_width / map_height
   offset_x: -0.25 # negative = left of centre
   offset_y: -1.0 # negative = below centre

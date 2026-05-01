@@ -14,7 +14,10 @@ from vehicleRoutingProblem import (
     solve_vrp_balanced,
     extract_paths,
 )
-from collisionAvoidance import add_delays_to_avoid_collisions, animate_trajectories
+
+from sampleCount import compute_sample_count
+from animation import animate_trajectories
+from collisionAvoidance import add_delays_to_avoid_collisions
 from plotting import plot_results
 from jsonTesting import makeJSONMission
 from datetime import datetime
@@ -27,36 +30,6 @@ def load_config(path=None):
         path = os.path.join(os.path.dirname(__file__), "..", "config.yaml")
     with open(path) as f:
         return yaml.safe_load(f)
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def polygon_area_m2(poly_latlon):
-    transformer = Transformer.from_crs(
-        "EPSG:4326", "EPSG:32619", always_xy=True)
-
-    def _swap_xy(x, y, z=None):
-        return transformer.transform(y, x)
-
-    poly_utm = transform(_swap_xy, poly_latlon)
-    return poly_utm.area
-
-
-def compute_sample_count(map, sample_time, speed, mission_time, num_agents=1):
-    area = polygon_area_m2(map)
-    max_possible = int((mission_time * num_agents) / sample_time)
-    best_N = 1
-    for N in range(1, max_possible + 1):
-        if N % num_agents != 0:
-            continue
-        N_per_agent = N / num_agents
-        total_time = N_per_agent * sample_time + \
-            math.sqrt(area * N_per_agent) / speed
-        if total_time <= mission_time:
-            best_N = N
-        else:
-            break
-    return best_N
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -118,17 +91,22 @@ def main():
     map_height = maxy - miny
 
     if d["mode"] == "offset":
-        depot1_coord = np.array([
+        '''Intended for use when testing without known depot coords'''
+        depot = [
             (minx + maxx) / 2 + d["offset_x"] * map_width,
             (miny + maxy) / 2 + d["offset_y"] * map_height,
-        ])
+        ]
+        depot_coords = []
+        for i in range(num_agents):
+            depot_coords.append(depot)
     elif d["mode"] == "coordinate":
-        depot1_coord = np.array([d["depot1_x"],d["depot1_y"]])
-        depot2_coord = np.array([d["depot2_x"],d["depot2_y"]])
-        depot3_coord = np.array([d["depot3_x"],d["depot3_y"]])
+        '''Set each individual depot specifically'''
+        depot_coords = []
+        for i, depot in enumerate(d["depots"]):
+            depot_coords.append(depot)
 
     # ── VRP ───────────────────────────────────────────────────────────────────
-    coords = np.vstack([depot1_coord, depot2_coord, depot3_coord, final_dots.copy()])
+    coords = np.concat([depot_coords, final_dots.copy()])
 
     travel_duration_matrix = np.array([
         [np.hypot(coords[i][0] - coords[j][0], coords[i][1] - coords[j][1])
@@ -160,11 +138,11 @@ def main():
     # ── Build per-route coordinate lists (2-D and 3-D) ───────────────────────
     routes_coords = []
     routes_coords_3d = []
-    i = 1
+    i = 0
 
-    for route in solution.routes():
+    for route in routes:
         route_indices = [0] + list(route) + [0]
-        coords[0] = np.array([d[f"depot{i}_x"],d[f"depot{i}_y"]]) 
+        coords[0] = np.array([d[f"depots"][i][0],d[f"depots"][i][1]]) 
 
         route_coords = [copy.copy(coords[i]) for i in route_indices]
         route_coords_3d = [np.append(copy.copy(coords[i]), out["drone_altitude"])

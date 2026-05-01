@@ -10,40 +10,17 @@ def build_vrp_model(coords, time_windows, travel_duration_matrix,
     
     m = pyvrp.Model()
 
-    m.add_depot(
-        x=coords[0][0],
-        y=coords[0][1],
-        name="Depot1",
-    )
-    m.add_depot(
-        x=coords[1][0],
-        y=coords[1][1],
-        name="Depot2",
-    )
-    m.add_depot(
-        x=coords[2][0],
-        y=coords[2][1],
-        name="Depot3",
-    )
+    for i in range(max_vehicles):
+        m.add_depot(
+            x=coords[i][0],
+            y=coords[i][1],
+            name=f"Depot{i+1}",
+        )
 
     num_depots = len(m._depots)
 
     if mode == "unlimited":
-
-        m.add_vehicle_type(
-            max_vehicles,
-            unit_distance_cost=0,
-            unit_duration_cost=1,
-        )
-        for idx in range(num_depots, len(coords)):
-            m.add_client(
-                x=coords[idx][0],
-                y=coords[idx][1],
-                tw_early=time_windows[idx][0],
-                tw_late=time_windows[idx][1],
-                service_duration=service_time,
-                name=f"Client {idx}",
-            )
+        pass
 
     elif mode == "balanced":
         for idx in range(max_vehicles):
