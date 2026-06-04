@@ -1,12 +1,14 @@
 import math
 import copy
 import os
+import sys
 import yaml
 import pickle
 import numpy as np
 from shapely.geometry import Polygon
 from shapely.ops import transform
 from pyproj import Transformer
+import geopandas as gpd
 
 from lloydsAlgorithm import Lloyd_algoritm
 from vehicleRoutingProblem import (
@@ -31,27 +33,76 @@ def load_config(path=None):
     with open(path) as f:
         return yaml.safe_load(f)
 
+# Map loading 
+
+def load_map_data(data_path):
+    region = gpd.read_file(
+        data_path,
+        layer="polygon"
+    )
+    points = gpd.read_file(
+        data_path,
+        layer="points"
+    )
+
+    poly = region.geometry.iloc[0]
+    # Vertices are stored at lon/lat, so we swap the order here
+    vertices = [[float(lat), float(lon)] for lon, lat in poly.exterior.coords[:-1]]
+    print(f"Vertices: {vertices}")
+
+    return points,vertices
+
+
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main():
-    cfg = load_config()
+def main(data_path=None):
+    if data_path is None:
+        # We don't have moisture data, use the default config
+        cfg = load_config()
 
-    m = cfg["mission"]
-    ll = cfg["lloyd"]
-    v = cfg["vrp"]
-    d = cfg["depot"]
-    out = cfg["output"]
-    ani = cfg["animation"]
+        points = vertices = None
 
-    num_agents = m["num_agents"]
-    mission_time = m["mission_time"]
-    sample_time = m["sample_time"]
-    speed = m["speed"]
-    d_safe = m["d_safe"]
+        m = cfg["mission"]
+        ll = cfg["lloyd"]
+        v = cfg["vrp"]
+        d = cfg["depot"]
+        out = cfg["output"]
+        ani = cfg["animation"]
+
+        num_agents = m["num_agents"]
+        mission_time = m["mission_time"]
+        sample_time = m["sample_time"]
+        speed = m["speed"]
+        d_safe = m["d_safe"]
+    
+    else:
+        # We still use most of the config, so load it first
+        cfg = load_config()
+
+        # Override config with our vertex values from the map
+        points, vertices = load_map_data(data_path=data_path)
+
+        m = cfg["mission"]
+        ll = cfg["lloyd"]
+        v = cfg["vrp"]
+        d = cfg["depot"]
+        d["depots"] = [vertices[0]]
+        print(f"vert 0 = {vertices[0]}")
+        out = cfg["output"]
+        ani = cfg["animation"]
+
+        num_agents = m["num_agents"]
+        mission_time = m["mission_time"]
+        sample_time = m["sample_time"]
+        speed = m["speed"]
+        d_safe = m["d_safe"]
 
     # ── Polygon ───────────────────────────────────────────────────────────────
-    poly = Polygon([tuple(pt) for pt in cfg["polygon"]["vertices"]])
+    if vertices is None:
+        poly = Polygon([tuple(pt) for pt in cfg["polygon"]["vertices"]])
+    else:
+        poly = Polygon(vertices)
 
     # ── Sample count ──────────────────────────────────────────────────────────
     if ll["n_dots_override"] is not None:
@@ -68,19 +119,23 @@ def main():
         print(f"[config] N_dots computed = {N_dots}")
 
     # ── Lloyd's Algorithm ─────────────────────────────────────────────────────
-    CACHE_FILE = f"lloyd_cache_N{1}_iter{1}_part{1}_seed{1}.pkl"
+    # CACHE_FILE = f"lloyd_cache_N{1}_iter{1}_part{1}_seed{1}.pkl"
 
-    if os.path.exists(CACHE_FILE):
-        print(f"Loading Lloyd cache from {CACHE_FILE}")
-        with open(CACHE_FILE, "rb") as f:
-            history_tessell, history_dots = pickle.load(f)
-    else:
-        history_tessell, history_dots = Lloyd_algoritm(
-            ll["iterations"], N_dots, poly, ll["partition"], ll["seed"]
-        )
-        with open(CACHE_FILE, "wb") as f:
-            pickle.dump((history_tessell, history_dots), f)
-        print(f"Lloyd result cached to {CACHE_FILE}")
+    # if os.path.exists(CACHE_FILE):
+    #     print(f"Loading Lloyd cache from {CACHE_FILE}")
+    #     with open(CACHE_FILE, "rb") as f:
+    #         history_tessell, history_dots = pickle.load(f)
+    # else:
+    #     history_tessell, history_dots = Lloyd_algoritm(
+    #         ll["iterations"], N_dots, poly, ll["partition"], ll["seed"]
+    #     )
+    #     with open(CACHE_FILE, "wb") as f:
+    #         pickle.dump((history_tessell, history_dots), f)
+    #     print(f"Lloyd result cached to {CACHE_FILE}")
+
+    history_tessell, history_dots = Lloyd_algoritm(
+        ll["iterations"], N_dots, poly, ll["partition"], ll["seed"]
+    )
     
     final_tessellation = history_tessell[-1]
     final_dots = history_dots[-1]
@@ -165,7 +220,7 @@ def main():
     # ── Static plot (optional) ────────────────────────────────────────────────
     if ani["show_static_plot"]:
         plot_results(poly, final_tessellation, coords, solution,
-                     coord_order="latlon")
+                     coord_order="latlon", datapoints=points)
 
     # ── Animation ─────────────────────────────────────────────────────────────
     os.makedirs("animation_output", exist_ok=True)
@@ -189,4 +244,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) == 1:
+        data_path = None
+    if len(sys.argv) == 2:
+        data_path = sys.argv[1]
+    else:
+        raise ValueError("Unexpected number of additional arguments --- expected 0 or 1 to specify data path")
+        sys.exit()
+    main(data_path=data_path)
