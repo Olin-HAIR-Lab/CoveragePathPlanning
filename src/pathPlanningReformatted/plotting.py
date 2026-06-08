@@ -14,7 +14,7 @@ def _plot_coords(point, coord_order="lonlat"):
     raise ValueError(f"Unknown coord_order: {coord_order}")
 
 
-def plot_results(poly, tessellation, coords, solution, coord_order="lonlat", datapoints=None):
+def plot_results(poly, tessellation, coords, solution, coord_order="lonlat", datapoints=None, means=None, stds=None):
     plt.figure(figsize=(7, 7))
 
     # Polygon
@@ -80,13 +80,15 @@ def plot_results(poly, tessellation, coords, solution, coord_order="lonlat", dat
 
         plt.plot(xs, ys, color=colors[r_idx % len(colors)], linewidth=2)
     
-    # Data
-    if datapoints is not None:
-        # Plot contained points (have to convert them back to lonlat)
-        x = [point.y for point in datapoints.geometry]
-        y = [point.x for point in datapoints.geometry]
-        plt.scatter(x,y,c=datapoints['Moisture'].to_numpy(),s=20,marker='o',edgecolors='k',linewidths=0,cmap="RdBu",vmin=12,vmax=20)
-        #datapoints.plot(ax=plt.gca(), markersize=1, column="Moisture", cmap="RdBu", vmin=10, vmax=22)
+    # # Data
+    # if datapoints is not None:
+    #     # Plot contained points (have to convert them back to lonlat)
+    #     x = [point.y for point in datapoints.geometry]
+    #     y = [point.x for point in datapoints.geometry]
+    #     plt.scatter(x,y,c=datapoints['Moisture'].to_numpy(),s=20,marker='o',edgecolors='k',linewidths=0,cmap="RdBu",vmin=12,vmax=20)
+
+    # Prediction
+    
 
     plt.title("Drone Trajectories (Top View)", fontsize=18)
     plt.xlabel("Latitude", fontsize=14)

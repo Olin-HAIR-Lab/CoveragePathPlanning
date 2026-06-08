@@ -16,6 +16,7 @@ from vehicleRoutingProblem import (
     solve_vrp_balanced,
     extract_paths,
 )
+from fit_gp import fit_gp
 
 from sampleCount import compute_sample_count
 from animation import animate_trajectories
@@ -45,10 +46,16 @@ def load_map_data(data_path):
         layer="points"
     )
 
+    # Convert to CRS with units of meters
+    # We store them in 4326 (units of latlon) but we want meters
+    # points = points.to_crs("32616")
+    # region = region.to_crs("32616")
+
     poly = region.geometry.iloc[0]
     # Vertices are stored at lon/lat, so we swap the order here
     vertices = [[float(lat), float(lon)] for lon, lat in poly.exterior.coords[:-1]]
-    print(f"Vertices: {vertices}")
+    #vertices = [[float(x), float(y)] for x, y in poly.exterior.coords[:-1]]
+    #print(f"Vertices: {vertices}")
 
     return points,vertices
 
@@ -62,6 +69,11 @@ def main(data_path=None):
         cfg = load_config()
 
         points = vertices = None
+
+        # Default coordinate system 
+        crs = "EPSG:4326"
+        utm_crs = "EPSG:32619"
+        print(f"Coordinates are in {crs} / UTM {utm_crs}")
 
         m = cfg["mission"]
         ll = cfg["lloyd"]
@@ -82,6 +94,9 @@ def main(data_path=None):
 
         # Override config with our vertex values from the map
         points, vertices = load_map_data(data_path=data_path)
+        crs = points.crs
+        utm_crs = points.estimate_utm_crs()
+        print(f"Coordinates are in {crs} / UTM {utm_crs}")
 
         m = cfg["mission"]
         ll = cfg["lloyd"]
@@ -103,6 +118,7 @@ def main(data_path=None):
         poly = Polygon([tuple(pt) for pt in cfg["polygon"]["vertices"]])
     else:
         poly = Polygon(vertices)
+        print(f"Polygon area: {poly.area}")
 
     # ── Sample count ──────────────────────────────────────────────────────────
     if ll["n_dots_override"] is not None:
@@ -115,6 +131,8 @@ def main(data_path=None):
             speed=speed,
             mission_time=mission_time,
             num_agents=num_agents,
+            ll_crs=crs,
+            utm_crs=utm_crs
         )
         print(f"[config] N_dots computed = {N_dots}")
 
@@ -213,6 +231,26 @@ def main(data_path=None):
         routes_coords, speed=speed, d_safe=d_safe
     )
 
+    # Fit GP to sampled data
+    if points is not None:
+        # We want to work only on units of meters, so convert the CRS
+        latlon_to_xy_tf = Transformer.from_crs(
+            crs, utm_crs, always_xy=True
+        )
+        def tf(x, y):
+            return latlon_to_xy_tf.transform(y, x) # because values here are latlon
+        
+        points_utm = points.to_crs(utm_crs)
+        coords_utm = [[tf(coord[0],coord[1]) for coord in route] for route in routes_coords]
+        poly_utm = transform(tf, poly) # applies CRS transform
+        #print(f"Coords (latlon): {routes_coords}\n UTM Coords (xy): {coords_utm}")
+        #print(f"region: {poly_utm}")
+        #print(f"points: {points_utm}")
+
+        means,stds = fit_gp(coords=coords_utm, points=points_utm, region=poly_utm, gui=True)
+    else:
+        means = stds = None
+
     # ── JSON output ───────────────────────────────────────────────────────────
     if out["json_file"]:
         makeJSONMission(out["json_file"], *routes_coords_3d[:num_agents])
@@ -220,7 +258,7 @@ def main(data_path=None):
     # ── Static plot (optional) ────────────────────────────────────────────────
     if ani["show_static_plot"]:
         plot_results(poly, final_tessellation, coords, solution,
-                     coord_order="latlon", datapoints=points)
+                     coord_order="latlon", datapoints=points, means=means, stds=stds)
 
     # ── Animation ─────────────────────────────────────────────────────────────
     os.makedirs("animation_output", exist_ok=True)
@@ -238,7 +276,8 @@ def main(data_path=None):
         solution=solution,
         coord_order="latlon",
         save_path=save_path,
-        d=d
+        d=d,
+        datapoints=points
     )
     
 
@@ -246,7 +285,7 @@ def main(data_path=None):
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         data_path = None
-    if len(sys.argv) == 2:
+    elif len(sys.argv) == 2:
         data_path = sys.argv[1]
     else:
         raise ValueError("Unexpected number of additional arguments --- expected 0 or 1 to specify data path")

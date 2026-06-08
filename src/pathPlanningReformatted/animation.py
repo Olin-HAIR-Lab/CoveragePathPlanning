@@ -79,7 +79,7 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
                          poly=None, tessellation=None,
                          map_coords=None, solution=None,
                          coord_order="latlon", d=None,
-                         save_path=None):
+                         save_path=None, datapoints=None):
 
     t_start = 0.0
     t_end = max(seg[3] for traj in trajectories for seg in traj)
@@ -174,7 +174,8 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
                         for pt in region_coords
                     ])
                 x_reg, y_reg = region_coords[:, 0], region_coords[:, 1]
-                ax.fill(x_reg, y_reg, alpha=0.3, zorder=1)
+                #ax.fill(x_reg, y_reg, alpha=0.3, zorder=1)
+                ax.plot(x_reg, y_reg, linewidth=2, alpha=0.8, color="black")
 
     if map_coords is not None:
         map_plot = np.array([_plot_coords(pt, coord_order=coord_order)
@@ -200,11 +201,19 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
                     linewidth=1.5, alpha=0.4, zorder=2)
     
     if d is not None:
-        for i in range(3):
+        for i in range(1): ############### this should be changed to use the num_agents value in the config
             ax.scatter(d[f"depots"][i][1], d[f"depots"][i][0],
                 c='red', s=250, marker='*', zorder=3)
+    
+    if datapoints is not None:
+        # Plot contained points (have to convert them back to lonlat)
+        x = [point.x for point in datapoints.geometry]
+        y = [point.y for point in datapoints.geometry]
+        ax.scatter(x,y,c=datapoints['Moisture'].to_numpy(),s=20,marker='o',edgecolors='k',linewidths=0,cmap="RdBu",vmin=12,vmax=20)
+        plt.show()
         
     # ── End static map background ──────────────────────────────────────────
+    print(f"finished drawing static")
 
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     points, trails, rings = [], [], []
@@ -231,6 +240,8 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
     pct_text = ax_bar.text(0.5, -0.05, "0%", ha="center", va="top", fontsize=9)
 
     def update(frame):
+        if (frame % 20 == 0):
+            print(f"Starting frame {frame}.")
         for i, states in enumerate(all_states):
             pos, kind = states[frame]
             x, y = _plot_coords(pos, coord_order=coord_order)
@@ -256,5 +267,6 @@ def animate_trajectories(trajectories, routes, dt=0.5, trail_length=30,
     ani = FuncAnimation(fig, update, frames=len(times),
                         interval=interval_ms, blit=False, repeat=False)
     if save_path:
+        print("Saving frames...")
         ani.save(save_path, writer="pillow", fps=20)
     plt.show()
