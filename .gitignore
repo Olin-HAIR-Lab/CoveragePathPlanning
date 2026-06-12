@@ -3,3 +3,4 @@ venv/
 *output.json
 *.pkl
 *.gif
+*.DS_Store

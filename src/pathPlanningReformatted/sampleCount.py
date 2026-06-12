@@ -8,6 +8,8 @@ from shapely.geometry import Polygon
 from shapely.ops import transform
 from pyproj import Transformer
 
+SQ_METERS_PER_ACRE = 4046.86
+
 def polygon_area_m2(poly_latlon, ll_crs, utm_crs):
     # transformer = Transformer.from_crs(
     #     "EPSG:4326", "EPSG:32619", always_xy=True)
@@ -36,4 +38,5 @@ def compute_sample_count(map, sample_time, speed, mission_time, num_agents=1, ll
             best_N = N
         else:
             break
+    print(f"Resolution: {(area/SQ_METERS_PER_ACRE)/best_N:.2f} acres per sample")
     return best_N

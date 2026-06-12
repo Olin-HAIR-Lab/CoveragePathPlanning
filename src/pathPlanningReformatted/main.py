@@ -118,7 +118,6 @@ def main(data_path=None):
         poly = Polygon([tuple(pt) for pt in cfg["polygon"]["vertices"]])
     else:
         poly = Polygon(vertices)
-        print(f"Polygon area: {poly.area}")
 
     # ── Sample count ──────────────────────────────────────────────────────────
     if ll["n_dots_override"] is not None:
@@ -247,8 +246,8 @@ def main(data_path=None):
         #print(f"region: {poly_utm}")
         #print(f"points: {points_utm}")
 
-        means,stds = fit_gp(coords_input=coords_utm, points_input=points_utm, region_input=poly_utm, n_synth=0, gui=True)
-        #repeat_gp(coords=coords_utm,points=points_utm,region=poly_utm)
+        #means,stds = fit_gp(coords_input=coords_utm, points_input=points_utm, region_input=poly_utm, n_synth=0, gui=True)
+        repeat_gp(coords=coords_utm,points=points_utm,region=poly_utm)
         sys.exit()
     else:
         means = stds = None
