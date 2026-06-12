@@ -204,14 +204,14 @@ def main(yaml_path):
         coords_utm = [[tf(coord[0],coord[1]) for coord in route] for route in routes_coords]
         poly_utm = transform(tf, poly) # applies CRS transform
 
-        for aniso in [False, True]:
+        for aniso in [False]:
             for noise in [True]:
-                for two_RBF in [False, True]:
+                for two_RBF in [False]:
                     df = repeat_gp(coords=coords_utm,points=points_utm,region=poly_utm,trials=1,voronoi=True,anisotropic=aniso,noise=noise,two_RBF=two_RBF)
                     df['region_name'] = data_path
                     full_df = pd.concat([full_df, df], ignore_index=True)
 
-    full_df.to_csv("gp_metrics_two_RBF_Voronoi.csv",index=False)
+    full_df.to_csv("gp_metrics_Voronoi_farm12.csv",index=False)
     print(full_df)
 
 if __name__ == "__main__":
