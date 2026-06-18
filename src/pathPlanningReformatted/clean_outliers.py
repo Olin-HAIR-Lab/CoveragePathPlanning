@@ -18,6 +18,7 @@ def main(path):
         try:
             dates = gdf["date"]
         except KeyError:
+            print(f"Couldn't get date for {datapath}")
             continue
 
         dates_set = dates.unique()
@@ -36,8 +37,8 @@ def main(path):
         gdf_filtered_date = gdf[gdf['date'] == target_date]
         print(f"Removed {len(gdf) - len(gdf_filtered_date)} points based on their date")
 
-        gdf_filtered = gdf_filtered_date[(gdf_filtered_date["z_score"] >= -3.5) &
-                        (gdf_filtered_date["z_score"] <= 3.5)]
+        gdf_filtered = gdf_filtered_date[(gdf_filtered_date["z_score"] >= -3) &
+                        (gdf_filtered_date["z_score"] <= 3)]
 
         print(f"Removed {len(gdf_filtered_date) - len(gdf_filtered)} points ({100*(len(gdf_filtered_date) - len(gdf_filtered))/len(gdf):.2f}%) based on their Z score")
         print(f"Remaining: {len(gdf_filtered)} ({100*len(gdf_filtered)/len(gdf):.1f}%) of original date")
@@ -46,7 +47,7 @@ def main(path):
         print(f"Std: {np.std(gdf['Moisture']):.2f} original --> {np.std(gdf_filtered['Moisture']):.2f} after filtering")
 
         # Save results
-        gdf.to_file(f"{datapath[:-5]}_filtered.gpkg", driver="GPKG", layer="points")
+        gdf_filtered.to_file(f"{datapath[:-5]}_filtered.gpkg", driver="GPKG", layer="points")
         poly_layer = gpd.read_file(datapath,layer="polygon")
         poly_layer.to_file(f"{datapath[:-5]}_filtered.gpkg", driver="GPKG", layer="polygon")
 
