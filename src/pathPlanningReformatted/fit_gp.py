@@ -183,7 +183,7 @@ def fit_gp_flexible(
         kernel = make_rbf_component(
             "single",
             length_scale=20.0,
-            bounds=(0.1, 800.0),
+            bounds=(1.0, 800.0),
             aniso=aniso
         )
 
@@ -233,7 +233,7 @@ def fit_gp_flexible(
         return_std=True
     )
 
-    rmse, nrmse, nrmse_std = get_err(
+    rmse, nrmse, nrmse_std, rmse_over_std = get_err(
         gp=gaussian_process,
         points=points,
         used_indices=close_idx
@@ -267,14 +267,14 @@ def fit_gp_flexible(
 
         fig.suptitle(
             f"Predicted mean from samples vs ground truth\n"
-            f"NRMSE_std: {nrmse_std:.3f}\n"
+            f"NRMSE: {nrmse:.3f}\n"
             f"{kernel_info['kernel']}"
         )
 
         plt.tight_layout()
         plt.show()
 
-    return mean_pred, std_pred, kernel_info, rmse, nrmse, nrmse_std
+    return mean_pred, std_pred, kernel_info, rmse, nrmse, nrmse_std, rmse_over_std
 
 def repeat_gp(coords,points,region,trials=25,voronoi=False,anisotropic=False,noise=False,two_RBF=True):
     
@@ -289,6 +289,7 @@ def repeat_gp(coords,points,region,trials=25,voronoi=False,anisotropic=False,noi
     nrmse_avg = np.zeros(n_points.size)
     rmse_avg = np.zeros(n_points.size)
     nrmse_std_avg = np.zeros(n_points.size)
+    rmse_over_std_avg = np.zeros(n_points.size)
 
     # Kernel hyperparameters
     mag_long_avg = np.zeros(n_points.size)
@@ -303,6 +304,7 @@ def repeat_gp(coords,points,region,trials=25,voronoi=False,anisotropic=False,noi
         rmses = np.zeros(n_trials)
         nrmses = np.zeros(n_trials)
         nrmses_std = np.zeros(n_trials)
+        rmse_over_stds = np.zeros(n_trials)
 
         mag_long_arr = np.zeros(n_trials)
         mag_short_arr = np.zeros(n_trials)
@@ -313,7 +315,7 @@ def repeat_gp(coords,points,region,trials=25,voronoi=False,anisotropic=False,noi
         noise_arr = np.zeros(n_trials)
 
         for j in range(n_trials):
-            _, _, info, rmses[j], nrmses[j], nrmses_std[j] = fit_gp_flexible(
+            _, _, info, rmses[j], nrmses[j], nrmses_std[j], rmse_over_stds[j] = fit_gp_flexible(
                                                                 coords_input=coords,
                                                                 points_input=points,
                                                                 region_input=region,
@@ -365,6 +367,7 @@ def repeat_gp(coords,points,region,trials=25,voronoi=False,anisotropic=False,noi
         rmse_avg[i] = np.mean(rmses)
         nrmse_avg[i] = np.mean(nrmses)
         nrmse_std_avg[i] = np.mean(nrmses_std)
+        rmse_over_std_avg[i] = np.mean(rmse_over_stds)
 
     if voronoi:
         # All coordinates, divided by 2 (because X,Y is 1 coords) minus 2 (don't sample start and end)
@@ -378,6 +381,7 @@ def repeat_gp(coords,points,region,trials=25,voronoi=False,anisotropic=False,noi
         "two_RBF": two_RBF,
         "n_points": n_points_true,
         "rmse_avg": rmse_avg,
+        "RMS error relative to prediction std": rmse_over_std_avg,
         "nrmse_avg": nrmse_avg,
         "nrmse_std_avg": nrmse_std_avg,
         "mag_RBF_long_avg": mag_long_avg,
@@ -390,6 +394,7 @@ def repeat_gp(coords,points,region,trials=25,voronoi=False,anisotropic=False,noi
         "area": region.area,
         "std": rmse_avg / nrmse_std_avg,
         "area per sample (m2 / sample)": region.area / n_points_true, 
+        "range": rmse_avg / nrmse_avg
     })
     return df
 
@@ -401,7 +406,7 @@ def get_err(gp,points,used_indices):
     valid = ~used_mask
     eval_pos = ground_truth_pos[valid]
 
-    predicted_values = gp.predict(eval_pos)
+    predicted_values,prediction_std = gp.predict(eval_pos,return_std=True)
     actual_values = points['Moisture'].to_numpy()
     eval_values = actual_values[valid]
 
@@ -409,4 +414,9 @@ def get_err(gp,points,used_indices):
     rmse = np.linalg.norm(err) / np.sqrt(err.size)
     nrmse = rmse / np.ptp(eval_values)
     nrmse_std = rmse / np.std(eval_values)
-    return rmse,nrmse,nrmse_std
+
+    # Get the error relative to the variance
+    err_over_std = err / prediction_std
+    rmse_over_std = np.linalg.norm(err) / np.sqrt(err_over_std.size)
+
+    return rmse,nrmse,nrmse_std,rmse_over_std

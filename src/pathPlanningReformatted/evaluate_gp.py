@@ -97,6 +97,7 @@ def main(yaml_path):
         # Override --- we want random seeds
         ll["iterations"] = 9
         ll["seed"] = None
+        n_generate_cells = 8 # Do 8 voronoi tesselations for each map
 
         # ── Polygon ───────────────────────────────────────────────────────────────
         poly = Polygon(vertices)
@@ -117,101 +118,102 @@ def main(yaml_path):
             )
             print(f"[config] N_dots computed = {N_dots}")
 
-        history_tessell, history_dots = Lloyd_algoritm(
-            ll["iterations"], N_dots, poly, ll["partition"], ll["seed"]
-        )
-        
-        final_tessellation = history_tessell[-1]
-        final_dots = history_dots[-1]
-
-        # ── Depot Coordinate ──────────────────────────────────────────────────────
-        minx, miny, maxx, maxy = poly.bounds
-        map_width = maxx - minx
-        map_height = maxy - miny
-
-        if d["mode"] == "offset":
-            '''Intended for use when testing without known depot coords'''
-            depot = [
-                (minx + maxx) / 2 + d["offset_x"] * map_width,
-                (miny + maxy) / 2 + d["offset_y"] * map_height,
-            ]
-            depot_coords = []
-            for i in range(num_agents):
-                depot_coords.append(depot)
-        elif d["mode"] == "coordinate":
-            '''Set each individual depot specifically'''
-            depot_coords = []
-            for i, depot in enumerate(d["depots"]):
-                depot_coords.append(depot)
-
-        # ── VRP ───────────────────────────────────────────────────────────────────
-        coords = np.concat([depot_coords, final_dots.copy()])
-
-        travel_duration_matrix = np.array([
-            [np.hypot(coords[i][0] - coords[j][0], coords[i][1] - coords[j][1])
-            for j in range(len(coords))]
-            for i in range(len(coords))
-        ])
-
-        max_dist = travel_duration_matrix.max()
-        travel_duration_matrix = travel_duration_matrix / max_dist * 100
-
-        time_windows = np.array([
-            (0, mission_time - travel_duration_matrix[i][0])
-            for i in range(len(coords))
-        ])
-
-        if v["mode"] == "balanced":
-            solution = solve_vrp_balanced(
-                coords, time_windows, travel_duration_matrix, num_vehicles=num_agents
+        for voronoi_iter in range(n_generate_cells):
+            history_tessell, history_dots = Lloyd_algoritm(
+                ll["iterations"], N_dots, poly, ll["partition"], ll["seed"]
             )
-        elif v["mode"] == "unlimited":
-            solution = solve_vrp_unlimited(
-                coords, time_windows, travel_duration_matrix)
-        else:
-            raise ValueError(
-                f"Unknown VRP mode: '{v['mode']}'. Use 'balanced' or 'unlimited'.")
+            
+            final_tessellation = history_tessell[-1]
+            final_dots = history_dots[-1]
 
-        paths, routes = extract_paths(solution, coords)
+            # ── Depot Coordinate ──────────────────────────────────────────────────────
+            minx, miny, maxx, maxy = poly.bounds
+            map_width = maxx - minx
+            map_height = maxy - miny
 
-        # ── Build per-route coordinate lists (2-D and 3-D) ───────────────────────
-        routes_coords = []
-        routes_coords_3d = []
-        i = 0
+            if d["mode"] == "offset":
+                '''Intended for use when testing without known depot coords'''
+                depot = [
+                    (minx + maxx) / 2 + d["offset_x"] * map_width,
+                    (miny + maxy) / 2 + d["offset_y"] * map_height,
+                ]
+                depot_coords = []
+                for i in range(num_agents):
+                    depot_coords.append(depot)
+            elif d["mode"] == "coordinate":
+                '''Set each individual depot specifically'''
+                depot_coords = []
+                for i, depot in enumerate(d["depots"]):
+                    depot_coords.append(depot)
 
-        for route in routes:
-            route_indices = [0] + list(route) + [0]
-            coords[0] = np.array([d[f"depots"][i][0],d[f"depots"][i][1]]) 
+            # ── VRP ───────────────────────────────────────────────────────────────────
+            coords = np.concat([depot_coords, final_dots.copy()])
 
-            route_coords = [copy.copy(coords[i]) for i in route_indices]
-            route_coords_3d = [np.append(copy.copy(coords[i]), out["drone_altitude"])
-                            for i in route_indices]
+            travel_duration_matrix = np.array([
+                [np.hypot(coords[i][0] - coords[j][0], coords[i][1] - coords[j][1])
+                for j in range(len(coords))]
+                for i in range(len(coords))
+            ])
 
-            routes_coords.append(route_coords)
-            routes_coords_3d.append(route_coords_3d)
+            max_dist = travel_duration_matrix.max()
+            travel_duration_matrix = travel_duration_matrix / max_dist * 100
 
-            i += 1
+            time_windows = np.array([
+                (0, mission_time - travel_duration_matrix[i][0])
+                for i in range(len(coords))
+            ])
 
-        # Fit GP to sampled data
-        # We want to work only on units of meters, so convert the CRS
-        latlon_to_xy_tf = Transformer.from_crs(
-            crs, utm_crs, always_xy=True
-        )
-        def tf(x, y):
-            return latlon_to_xy_tf.transform(y, x) # because values here are latlon
-        
-        points_utm = points.to_crs(utm_crs)
-        coords_utm = [[tf(coord[0],coord[1]) for coord in route] for route in routes_coords]
-        poly_utm = transform(tf, poly) # applies CRS transform
+            if v["mode"] == "balanced":
+                solution = solve_vrp_balanced(
+                    coords, time_windows, travel_duration_matrix, num_vehicles=num_agents
+                )
+            elif v["mode"] == "unlimited":
+                solution = solve_vrp_unlimited(
+                    coords, time_windows, travel_duration_matrix)
+            else:
+                raise ValueError(
+                    f"Unknown VRP mode: '{v['mode']}'. Use 'balanced' or 'unlimited'.")
 
-        for aniso in [False]:
-            for noise in [True]:
-                for two_RBF in [False]:
-                    df = repeat_gp(coords=coords_utm,points=points_utm,region=poly_utm,trials=1,voronoi=True,anisotropic=aniso,noise=noise,two_RBF=two_RBF)
-                    df['region_name'] = data_path
-                    full_df = pd.concat([full_df, df], ignore_index=True)
+            paths, routes = extract_paths(solution, coords)
 
-    full_df.to_csv("gp_metrics_Voronoi_farm12.csv",index=False)
+            # ── Build per-route coordinate lists (2-D and 3-D) ───────────────────────
+            routes_coords = []
+            routes_coords_3d = []
+            i = 0
+
+            for route in routes:
+                route_indices = [0] + list(route) + [0]
+                coords[0] = np.array([d[f"depots"][i][0],d[f"depots"][i][1]]) 
+
+                route_coords = [copy.copy(coords[i]) for i in route_indices]
+                route_coords_3d = [np.append(copy.copy(coords[i]), out["drone_altitude"])
+                                for i in route_indices]
+
+                routes_coords.append(route_coords)
+                routes_coords_3d.append(route_coords_3d)
+
+                i += 1
+
+            # Fit GP to sampled data
+            # We want to work only on units of meters, so convert the CRS
+            latlon_to_xy_tf = Transformer.from_crs(
+                crs, utm_crs, always_xy=True
+            )
+            def tf(x, y):
+                return latlon_to_xy_tf.transform(y, x) # because values here are latlon
+            
+            points_utm = points.to_crs(utm_crs)
+            coords_utm = [[tf(coord[0],coord[1]) for coord in route] for route in routes_coords]
+            poly_utm = transform(tf, poly) # applies CRS transform
+
+            for aniso in [False]:
+                for noise in [True]:
+                    for two_RBF in [False]:
+                        df = repeat_gp(coords=coords_utm,points=points_utm,region=poly_utm,trials=1,voronoi=True,anisotropic=aniso,noise=noise,two_RBF=two_RBF)
+                        df['region_name'] = data_path
+                        full_df = pd.concat([full_df, df], ignore_index=True)
+
+    full_df.to_csv("gp_metrics_Voronoi.csv",index=False)
     print(full_df)
 
 if __name__ == "__main__":

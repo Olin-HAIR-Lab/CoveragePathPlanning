@@ -16,7 +16,7 @@ from vehicleRoutingProblem import (
     solve_vrp_balanced,
     extract_paths,
 )
-from fit_gp import fit_gp, repeat_gp
+from fit_gp import fit_gp_flexible, repeat_gp
 
 from sampleCount import compute_sample_count
 from animation import animate_trajectories
@@ -246,9 +246,8 @@ def main(data_path=None):
         #print(f"region: {poly_utm}")
         #print(f"points: {points_utm}")
 
-        #means,stds = fit_gp(coords_input=coords_utm, points_input=points_utm, region_input=poly_utm, n_synth=0, gui=True)
-        repeat_gp(coords=coords_utm,points=points_utm,region=poly_utm)
-        sys.exit()
+        means, stds, kernel_info, rmse, nrmse, nrmse_std = fit_gp_flexible(coords_input=coords_utm, points_input=points_utm, region_input=poly_utm, n_synth=0, gui=True, noise=True, aniso=False, two_RBF=False)
+        #repeat_gp(coords=coords_utm,points=points_utm,region=poly_utm)
     else:
         means = stds = None
 
