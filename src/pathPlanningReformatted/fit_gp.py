@@ -9,7 +9,6 @@ from sklearn.preprocessing import StandardScaler
 from scipy.spatial import cKDTree
 from shapely.geometry import Point
 from shapely.affinity import translate
-import numpy as np
 import pandas as pd
 
 def random_points_in_polygon(poly, n, seed=None):
@@ -415,8 +414,9 @@ def get_err(gp,points,used_indices):
     nrmse = rmse / np.ptp(eval_values)
     nrmse_std = rmse / np.std(eval_values)
 
-    # Get the error relative to the variance
-    err_over_std = err / prediction_std
-    rmse_over_std = np.linalg.norm(err) / np.sqrt(err_over_std.size)
+    # Get the error relative to the std
+    eps = 1e-12
+    err_over_std = err / np.maximum(prediction_std, eps)
+    rmse_over_std = np.linalg.norm(err_over_std) / np.sqrt(err_over_std.size)
 
     return rmse,nrmse,nrmse_std,rmse_over_std

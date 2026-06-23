@@ -1,8 +1,6 @@
 import geopandas as gpd
 import pandas as pd
 from pathlib import Path
-import yaml
-import sys
 
 dirs = [
     "../scripts/region_previews_farm12/",
