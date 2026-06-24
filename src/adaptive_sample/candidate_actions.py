@@ -46,6 +46,9 @@ def generate_variance_candidates(
 
     # Sort by descending uncertainty
     order = np.argsort(std)[::-1]
+    
+    # Random order for now
+    np.random.shuffle(order)
 
     candidates = grid[order[:n_candidates]]
     candidate_scores = std[order[:n_candidates]]

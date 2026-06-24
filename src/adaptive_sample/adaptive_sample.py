@@ -11,10 +11,10 @@ import matplotlib.colors as colors
 
 from candidate_actions import generate_variance_candidates
 from model import MoistureModel
-from sample_ground_truth import sample_from_ground_truth
+from sample_ground_truth import sample_from_ground_truth, get_err
 from rewards import compute_cost
-from planner import GreedyVariancePlanner
-from visualize import plot_results
+from planner import GreedyVariancePlanner, VarianceMinusDistancePlanner
+from visualize import plot_results, plot_candidate_scores
 
 GRID_SPACING = 5
 
@@ -70,7 +70,7 @@ def main(path):
     budget_remaining = 1000
 
     model = MoistureModel()
-    planner = GreedyVariancePlanner()
+    planner = VarianceMinusDistancePlanner()
 
     # Initialize
     centroid = region.centroid
@@ -80,13 +80,24 @@ def main(path):
     initial_sample_pos, initial_sample_value = sample_from_ground_truth(current_position, points)
     model.add_observation(initial_sample_pos, initial_sample_value, virtual=False)
 
-    visited_pts = current_position.copy()
+    visited_pts = np.asarray([current_position], dtype=float)
 
     while budget_remaining > 0:
         print(f"Budget remaining: {budget_remaining}")
         #gp.fit(real_X, real_y)
         candidates,_ = generate_variance_candidates(gp=model.gp, region=region, resolution=GRID_SPACING)
         candidates = np.asarray(candidates, dtype=float).reshape(-1, 2)
+
+        scores = plot_candidate_scores(
+            model=model,
+            rwd_fun=planner.rwd_fun,
+            candidates=candidates,
+            current_pos=current_position,
+            region=region,
+            visited_pts=visited_pts,
+            title=f"Candidate rewards, budget={budget_remaining:.1f}",
+        )
+        print(f"Score range: {scores.min():.3f} to {scores.max():.3f}")
 
         plan = planner.plan(
             model=model,
@@ -110,6 +121,8 @@ def main(path):
         visited_pts = np.vstack([visited_pts, current_position])
     
     print(f"Finished! Final trajectory: {visited_pts}")
+    print(f"Retraining hyperparameters")
+    model.retrain_hyperparameters()
 
     plot_results(
         points=points,

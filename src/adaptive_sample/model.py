@@ -16,7 +16,7 @@ class MoistureModel:
     Class to hold the GP for building a moisture map
     """
     def __init__(self):
-        kernel = RBF() + 1.0 * WhiteKernel(noise_level_bounds=(1e-8, 1e2))
+        kernel = RBF(length_scale=40.0,length_scale_bounds=[10.0,800.0]) + 1.0 * WhiteKernel(noise_level_bounds=(1e-8, 1e2))
         self.gp = GaussianProcessRegressor(
             kernel=kernel,
             normalize_y=True,
@@ -35,12 +35,12 @@ class MoistureModel:
         self.X = np.vstack([self.X, X_in])
         self.y = np.concatenate([self.y, [y_in]])
 
-        if self.obs_since_retrain % 3 == 0:
+        # Fit the data, retraining hyperparameters if need be
+        if (not virtual) and self.obs_since_retrain % 5 == 0:
             self.retrain_hyperparameters()
             self.obs_since_retrain = 0
-        
-        # Fit the data
-        self.gp.fit(self.X, self.y)
+        else:
+            self.gp.fit(self.X, self.y)
     
     def retrain_hyperparameters(self):
         # We need an optimizer that will optimizer the kernel hyperparameters

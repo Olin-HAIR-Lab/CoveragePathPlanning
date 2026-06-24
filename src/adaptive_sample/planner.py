@@ -30,7 +30,7 @@ def score_virtual_path(model, rwd_fun, start_pos, path):
 
 class VarianceMinusDistancePlanner:
     def __init__(self):
-        dist_weight = 0.01
+        dist_weight = 0.001
         self.rwd_fun = VarianceMinusDistanceReward(dist_weight)
     
     def plan(self, model, candidates, current_pos, budget_remaining):
