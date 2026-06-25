@@ -109,9 +109,6 @@ def plot_candidate_scores(
     title="Candidate reward scores",
     resolution=2.0,
 ):
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from shapely.geometry import Point
 
     candidates = np.asarray(candidates, dtype=float).reshape(-1, 2)
     current_pos = np.asarray(current_pos, dtype=float).reshape(2,)
@@ -204,3 +201,100 @@ def plot_candidate_scores(
     plt.show()
 
     return scores
+
+def plot_candidate_paths(
+    region,
+    candidate_paths,
+    scores=None,
+    best_path=None,
+    current_pos=None,
+    visited_pts=None,
+    max_paths_to_plot=200,
+    title="Candidate paths",
+):
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    candidate_paths = np.asarray(candidate_paths, dtype=float)
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+
+    # Region boundary
+    bx, by = region.exterior.xy
+    ax.plot(bx, by, linewidth=2)
+
+    # Current trajectory
+    if visited_pts is not None:
+        visited_pts = np.asarray(visited_pts, dtype=float).reshape(-1, 2)
+        ax.plot(visited_pts[:, 0], visited_pts[:, 1], marker="o", linewidth=2, label="visited")
+
+    # Downsample paths for readability
+    n_paths = len(candidate_paths)
+    idxs = np.arange(n_paths)
+
+    if n_paths > max_paths_to_plot:
+        idxs = np.random.choice(idxs, size=max_paths_to_plot, replace=False)
+
+    # Optional score coloring
+    if scores is not None:
+        scores = np.asarray(scores, dtype=float)
+        norm = plt.Normalize(scores.min(), scores.max())
+        cmap = plt.cm.get_cmap('viridis')
+
+    for idx in idxs:
+        path = candidate_paths[idx]
+
+        if current_pos is not None:
+            start = np.asarray(current_pos, dtype=float).reshape(1, 2)
+            path_plot = np.vstack([start, path])
+        else:
+            path_plot = path
+
+        if scores is not None:
+            ax.plot(
+                path_plot[:, 0],
+                path_plot[:, 1],
+                alpha=0.25,
+                linewidth=1,
+                color=cmap(norm(scores[idx])),
+            )
+        else:
+            ax.plot(
+                path_plot[:, 0],
+                path_plot[:, 1],
+                alpha=0.15,
+                linewidth=1,
+            )
+
+    # Highlight best path
+    if best_path is not None:
+        best_path = np.asarray(best_path, dtype=float).reshape(-1, 2)
+
+        if current_pos is not None:
+            start = np.asarray(current_pos, dtype=float).reshape(1, 2)
+            best_path = np.vstack([start, best_path])
+
+        ax.plot(
+            best_path[:, 0],
+            best_path[:, 1],
+            marker="o",
+            linewidth=3,
+            label="best path",
+        )
+
+    if current_pos is not None:
+        current_pos = np.asarray(current_pos, dtype=float).reshape(2,)
+        ax.scatter(current_pos[0], current_pos[1], marker="x", s=100, label="current")
+
+    ax.set_title(title)
+    ax.set_aspect("equal")
+    ax.set_xlabel("x offset (m)")
+    ax.set_ylabel("y offset (m)")
+    ax.legend()
+
+    if scores is not None:
+        sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+        fig.colorbar(sm, ax=ax, label="path score")
+
+    plt.tight_layout()
+    plt.show()

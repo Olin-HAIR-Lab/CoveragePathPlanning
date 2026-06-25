@@ -31,7 +31,8 @@ def generate_variance_candidates(
     gp,
     region,
     resolution=2.0,
-    n_candidates=30,
+    n_candidates=5,
+    min_spacing=5,
 ):
     """
     Generate candidate sample locations by evaluating GP uncertainty
@@ -46,11 +47,38 @@ def generate_variance_candidates(
 
     # Sort by descending uncertainty
     order = np.argsort(std)[::-1]
-    
-    # Random order for now
-    np.random.shuffle(order)
 
-    candidates = grid[order[:n_candidates]]
-    candidate_scores = std[order[:n_candidates]]
+    candidates = []
+    candidate_scores = []
 
-    return candidates, candidate_scores
+    for idx in order:
+        candidate = grid[idx]
+
+        if len(candidates) == 0:
+            keep = True
+        else:
+            existing = np.asarray(candidates)
+            dists = np.linalg.norm(existing - candidate, axis=1)
+            keep = np.all(dists >= min_spacing)
+
+        if keep:
+            candidates.append(candidate)
+            candidate_scores.append(std[idx])
+
+        if len(candidates) >= n_candidates:
+            break
+
+    return np.asarray(candidates), np.asarray(candidate_scores)
+
+def generate_candidate_paths(candidates, n_step, count):
+    """
+    Given a set of candidate points, generate a number of paths connecting them
+    """
+    candidates = np.asarray(candidates, dtype=float).reshape(-1, 2)
+    candidate_paths = np.zeros((count, n_step, 2), dtype=float)
+
+    for i in range(count):
+        choices = np.random.choice(len(candidates), size=n_step, replace=False)
+        candidate_paths[i] = candidates[choices]
+
+    return candidate_paths
