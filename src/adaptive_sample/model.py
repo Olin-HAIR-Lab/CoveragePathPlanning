@@ -15,8 +15,8 @@ class MoistureModel:
     """
     Class to hold the GP for building a moisture map
     """
-    def __init__(self):
-        kernel = RBF(length_scale=40.0,length_scale_bounds=[10.0,800.0]) + 1.0 * WhiteKernel(noise_level_bounds=(1e-8, 1e2))
+    def __init__(self,min_length_scale):
+        kernel = RBF(length_scale=40.0,length_scale_bounds=[min_length_scale,800.0]) + 1.0 * WhiteKernel(noise_level_bounds=(1e-8, 1e2))
         self.gp = GaussianProcessRegressor(
             kernel=kernel,
             normalize_y=True,

@@ -4,6 +4,9 @@ import time
 import copy
 import os
 import sys
+import pandas as pd
+from dataclasses import dataclass
+from pathlib import Path
 import geopandas as gpd
 from shapely.geometry import Polygon, Point
 from shapely.affinity import translate
@@ -13,15 +16,32 @@ import matplotlib.colors as colors
 from candidate_actions import generate_variance_candidates, generate_candidate_paths
 from model import MoistureModel
 from sample_ground_truth import sample_from_ground_truth, get_err
-from rewards import compute_cost
+from rewards import compute_cost, CompositeReward
 from planner import GreedyVariancePlanner, VarianceMinusDistancePlanner, score_virtual_path, NStepLookaheadPlanner
 from visualize import plot_results, plot_candidate_scores, plot_candidate_paths
 
 from lloydsAlgorithm import Lloyd_algoritm
 from vehicleRoutingProblem import solve_vrp_balanced, extract_paths
 
-GRID_SPACING = 5
-PRESAMPLE_PTS = 3
+@dataclass
+class SimulationConfig:
+    data_path: str
+    n_steps: int = 3
+    budget: float = 1000
+    grid_spacing: float = 5
+    n_candidates: int = 10
+    min_candidate_spacing: float = 20
+    presample_pts: int = 3
+    lloyd_iterations: int = 5
+    lloyd_partition: int = 300
+    seed: int | None = None
+    make_plots: bool = True
+    mean_weight: float = 0
+    std_weight: float = 1
+    grad_mean_weight: float = 0.0
+    dist_weight: float = 0.005
+    far_from_mean_weight: float = 0
+    min_length_scale: float = 1.0
 
 # Map loading 
 def load_map_data(data_path):
@@ -65,38 +85,42 @@ def load_map_data(data_path):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main(path):
+def run_simulation(config):
 
     # Load the map
-    points, vertices, x_home, y_home = load_map_data(path) 
+    points, vertices, x_home, y_home = load_map_data(config.data_path) 
     region = Polygon(vertices)
     
     start_time = time.time()
-    budget_remaining = 1000
+    budget_remaining = config.budget
 
-    model = MoistureModel()
-    #planner = VarianceMinusDistancePlanner()
-    planner = NStepLookaheadPlanner(n_steps=3)
+    rwd_fun = CompositeReward(
+        w_mean=config.mean_weight,
+        w_std=config.std_weight,
+        w_mean_grad=config.grad_mean_weight,
+        w_dist=config.dist_weight,
+        w_far_from_mean=config.far_from_mean_weight
+    )
+
+    model = MoistureModel(min_length_scale=config.min_length_scale)
+    planner = NStepLookaheadPlanner(n_steps=3,rwd_fun=rwd_fun)
 
     # Initialize
     centroid = region.centroid
     current_position = np.array([centroid.x, centroid.y])
 
     # Presampling 
-    ll_iter = 1
-    ll_partition = 300 # density of grid
-    ll_seed = None
+    ll_iter = config.lloyd_iterations
+    ll_partition = config.lloyd_partition # density of grid
+    ll_seed = config.seed
     history_tessell, history_dots = Lloyd_algoritm(
-        ll_iter, PRESAMPLE_PTS, region, ll_partition, ll_seed
+        ll_iter, config.presample_pts, region, ll_partition, ll_seed, log=config.make_plots
     )
     
     final_tessellation = history_tessell[-1]
     final_dots = history_dots[-1]
 
-    print(current_position)
-    print(final_dots)
     coords = np.vstack([current_position, final_dots.copy()])
-    print(coords)
 
     travel_duration_matrix = np.array([
         [np.hypot(coords[i][0] - coords[j][0], coords[i][1] - coords[j][1])
@@ -131,7 +155,8 @@ def main(path):
         i += 1
     
     routes_coords = np.array(routes_coords[0])[:-1] # don't double-sample the start
-    print(f"Initial points: {routes_coords}")
+    if config.make_plots:
+        print(f"Initial points: {routes_coords}")
     visited_pts = routes_coords.copy()
 
     ## For now, assume we don't sample at our starting pos, but we do sample at each presample pos
@@ -145,46 +170,36 @@ def main(path):
     current_position = visited_pts[-1,:]
 
     while budget_remaining > 0:
-        print(f"Budget remaining: {budget_remaining}")
+        if config.make_plots:
+            print(f"Budget remaining: {budget_remaining}")
         #gp.fit(real_X, real_y)
-        candidates,_ = generate_variance_candidates(gp=model.gp, region=region, resolution=GRID_SPACING, n_candidates=10, min_spacing=40)
-        candidates = np.asarray(candidates, dtype=float).reshape(-1, 2)
-        #candidate_paths = generate_candidate_paths(candidates=candidates,n_step=3,count=300)
-
-        scores = plot_candidate_scores(
-            model=model,
-            rwd_fun=planner.rwd_fun,
-            candidates=candidates,
-            current_pos=current_position,
-            region=region,
-            visited_pts=visited_pts,
-            title=f"Candidate rewards, budget={budget_remaining:.1f}",
+        candidates,_ = generate_variance_candidates(
+            gp=model.gp, 
+            region=region, 
+            resolution=config.grid_spacing,
+            n_candidates=config.n_candidates, 
+            min_spacing=config.min_candidate_spacing
         )
-        print(f"Score range: {scores.min():.3f} to {scores.max():.3f}")
+        candidates = np.asarray(candidates, dtype=float).reshape(-1, 2)
 
-        # scores = np.array([
-        #     score_virtual_path(model, planner.rwd_fun, current_position, path)
-        #     for path in candidate_paths
-        # ])
-
-        # best_idx = np.argmax(scores)
-        # best_path = candidate_paths[best_idx]
-
-        # plot_candidate_paths(
-        #     region=region,
-        #     candidate_paths=candidate_paths,
-        #     scores=scores,
-        #     best_path=best_path,
-        #     current_pos=current_position,
-        #     visited_pts=visited_pts,
-        #     max_paths_to_plot=200,
-        # )
+        if config.make_plots:
+            scores = plot_candidate_scores(
+                model=model,
+                rwd_fun=planner.rwd_fun,
+                candidates=candidates,
+                current_pos=current_position,
+                region=region,
+                visited_pts=visited_pts,
+                title=f"Candidate rewards, budget={budget_remaining:.1f}",
+            )
+            print(f"Score range: {scores.min():.3f} to {scores.max():.3f}")
 
         plan = planner.plan(
             model=model,
             candidates=candidates,
             current_pos=current_position,
             budget_remaining=budget_remaining,
+            log=config.make_plots
         )
         if len(plan) == 0:
             budget_remaining = -1
@@ -192,7 +207,8 @@ def main(path):
             continue
 
         next_location = plan[0]
-        print(f"Plan[0]: {plan[0]}")
+        if config.make_plots:
+            print(f"Plan[0]: {plan[0]}")
 
         sampled_X,sampled_y = sample_from_ground_truth(next_location,points)
 
@@ -202,19 +218,53 @@ def main(path):
         current_position = next_location
         visited_pts = np.vstack([visited_pts, current_position])
     
-    print(f"Finished! Final trajectory: {visited_pts}")
-    print(f"Retraining hyperparameters")
+    if config.make_plots:
+        print(f"Finished! Final trajectory: {visited_pts}")
+        print(f"Retraining hyperparameters")
     model.retrain_hyperparameters()
 
-    plot_results(
-        points=points,
-        region=region,
-        model=model,
-        visited_pts=visited_pts,
-        resolution=GRID_SPACING,
-    )
+    if config.make_plots:
+        plot_results(
+            points=points,
+            region=region,
+            model=model,
+            visited_pts=visited_pts,
+            resolution=config.grid_spacing,
+        )
+    
+    rmse,nrmse,nrmse_std,rmse_over_std = get_err(gp=model.gp, points=points)
+    data_range = np.ptp(points['Moisture'].to_numpy())
+    data_std = np.std(points['Moisture'].to_numpy())
+    lengthscale = model.gp.kernel_.get_params()['k1__length_scale']
+    num_pts = visited_pts.shape[0]
+    results = {
+        "rmse": rmse,
+        "nrmse": nrmse,
+        "rmse_over_std": rmse_over_std,
+        "length_scale": lengthscale,
+        "num_pts": num_pts,
+        "presample_pts": config.presample_pts,
+        "n_steps": config.n_steps,
+        "budget": config.budget,
+        "n_candidates": config.n_candidates,
+        "min_spacing": config.min_candidate_spacing,
+        "min_length_scale": config.min_length_scale,
+        "w_mean": config.mean_weight,
+        "w_std": config.std_weight,
+        "w_dist": config.dist_weight,
+        "w_grad_mean": config.grad_mean_weight,
+        "w_far_from_mean": config.far_from_mean_weight,
+        "data_range": data_range,
+        "data_std": data_std,
+        "region_area": region.area,
+        "path": config.data_path
+    }
+    if config.make_plots:
+        print(results)
+    result_df = pd.DataFrame([results])
+    return result_df
         
-
-
 if __name__ == "__main__":
-    main(path=sys.argv[1])
+    config = SimulationConfig(data_path=sys.argv[1])
+    config.make_plots = True
+    run_simulation(config)

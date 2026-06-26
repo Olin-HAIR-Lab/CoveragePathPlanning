@@ -46,7 +46,7 @@ def new_centroids(tessellation, old_dots):
     return np.array(new_dots)
 
 
-def Lloyd_algoritm(Iterations, N, domain_poly, partition, seed=None):
+def Lloyd_algoritm(Iterations, N, domain_poly, partition, seed=None, log=False):
     if seed is not None:
         np.random.seed(seed)
 
@@ -70,6 +70,7 @@ def Lloyd_algoritm(Iterations, N, domain_poly, partition, seed=None):
         history_tessell.append(tessellation)
         history_dots.append(new_dots)
 
-        print(f"Iteration {itera} complete.")
+        if log:
+            print(f"Iteration {itera} complete.")
 
     return history_tessell, history_dots

@@ -42,11 +42,10 @@ def score_virtual_path(model, rwd_fun, start_pos, path):
     return total_score
 
 class NStepLookaheadPlanner:
-    def __init__(self,n_steps=3):
+    def __init__(self,rwd_fun,n_steps=3):
         self.n_steps = n_steps
-        dist_weight = 0.001
-        self.rwd_fun = VarianceMinusDistanceReward(dist_weight)
-    def plan(self, model, candidates, current_pos, budget_remaining):
+        self.rwd_fun = rwd_fun
+    def plan(self, model, candidates, current_pos, budget_remaining, log=False):
         # Start with the root node (zero reward, hasn't traveled at all)
         root = TreeNode(
             parent=None,
@@ -79,7 +78,26 @@ class NStepLookaheadPlanner:
 
                     #print(f"Trying to predict {candidate}")
                     mean, std = child_model.gp.predict(candidate.reshape(-1,2),return_std=True)
-                    reward = self.rwd_fun.evaluate(mean, std, node.current_pos, candidate)
+
+                    # If we want the gradient of the mean, we need a grid around the point we want
+                    h = 5.0
+                    xs = candidate[0] + np.array([-h, 0.0, h])
+                    ys = candidate[1] + np.array([-h, 0.0, h])
+
+                    xx, yy = np.meshgrid(xs, ys)
+                    eval_pts = np.column_stack([xx.ravel(), yy.ravel()])
+                    mean_grid = child_model.gp.predict(eval_pts).reshape(3, 3)
+
+                    # np.gradient returns [d/dy, d/dx]
+                    dmean_dy, dmean_dx = np.gradient(mean_grid, h)
+
+                    # Center point gradient
+                    grad_mean = np.linalg.norm(np.array([
+                        dmean_dx[1, 1],
+                        dmean_dy[1, 1],
+                    ]))
+
+                    reward = self.rwd_fun.evaluate(mean, std, grad_mean, node.current_pos, candidate)
 
                     child_model.add_observation(candidate, mean, virtual=True)
 
@@ -100,18 +118,20 @@ class NStepLookaheadPlanner:
                         best_node = child
 
             frontier = new_frontier
-            print(f"Finished depth {depth} with {len(frontier)} leaf nodes")
+            if log:
+                print(f"Finished depth {depth} with {len(frontier)} leaf nodes")
             
         
         if best_node is None:
             best_node = root
             best_score = root.score
-            print("No valid leaf nodes under budget")
         
-        print(f"Best score is {best_node.score} for path {best_node.path}")
+        if log:
+            print(f"Best score is {best_node.score} for path {best_node.path}")
         if best_node is None or len(best_node.path) == 0:
             return []
-        print(f"Choosing waypoint {best_node.path[0]}")
+        if log:
+            print(f"Choosing waypoint {best_node.path[0]}")
         return [best_node.path[0]]
 
 

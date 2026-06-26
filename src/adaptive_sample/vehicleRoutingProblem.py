@@ -62,7 +62,7 @@ def solve_vrp_unlimited(coords, time_windows, travel_duration_matrix):
         max_vehicles=100
     )
 
-    res = m.solve(stop=pyvrp.stop.MaxRuntime(1))
+    res = m.solve(stop=pyvrp.stop.MaxRuntime(1),display=False)
     return res.best
 
 
@@ -83,7 +83,7 @@ def solve_vrp_balanced(coords, time_windows, travel_duration_matrix, num_vehicle
         fixed_cost=500
     )
 
-    res = m.solve(stop=pyvrp.stop.MaxRuntime(1))
+    res = m.solve(stop=pyvrp.stop.MaxRuntime(1),display=False)
     return res.best
 
 

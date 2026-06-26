@@ -114,10 +114,11 @@ def plot_candidate_scores(
     current_pos = np.asarray(current_pos, dtype=float).reshape(2,)
 
     cand_means, cand_stds = model.gp.predict(candidates, return_std=True)
+    cand_grad_means = np.gradient(cand_means)
 
     scores = np.array([
-        rwd_fun.evaluate(float(mean), float(std), current_pos, candidate)
-        for mean, std, candidate in zip(cand_means, cand_stds, candidates)
+        rwd_fun.evaluate(float(mean), float(std), float(grad_mean), current_pos, candidate)
+        for mean, std, grad_mean, candidate in zip(cand_means, cand_stds, cand_grad_means, candidates)
     ])
 
     minx, miny, maxx, maxy = region.bounds
