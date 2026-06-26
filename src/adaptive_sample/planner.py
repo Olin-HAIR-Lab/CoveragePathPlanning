@@ -129,10 +129,10 @@ class NStepLookaheadPlanner:
         if log:
             print(f"Best score is {best_node.score} for path {best_node.path}")
         if best_node is None or len(best_node.path) == 0:
-            return []
+            return [], frontier, best_node
         if log:
             print(f"Choosing waypoint {best_node.path[0]}")
-        return [best_node.path[0]]
+        return [best_node.path[0]], frontier, best_node
 
 
 class VarianceMinusDistancePlanner:

@@ -140,6 +140,26 @@ def plot_candidate_scores(
     mean_grid = mean_grid.reshape(xx.shape)
     std_grid = std_grid.reshape(xx.shape)
 
+    dmean_dy, dmean_dx = np.gradient(mean_grid, resolution)
+    grad_mean_grid = np.sqrt(dmean_dx**2 + dmean_dy**2)
+
+    reward_grid = np.full(xx.shape, np.nan)
+
+    for row in range(xx.shape[0]):
+        for col in range(xx.shape[1]):
+            if np.isnan(mean_grid[row, col]):
+                continue
+
+            target = np.array([xx[row, col], yy[row, col]])
+
+            reward_grid[row, col] = rwd_fun.evaluate(
+                float(mean_grid[row, col]),
+                float(std_grid[row, col]),
+                float(grad_mean_grid[row, col]),
+                current_pos,
+                target,
+            )
+
     fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
 
     im0 = axes[0].imshow(
@@ -158,14 +178,23 @@ def plot_candidate_scores(
     axes[1].set_title("GP predictive std")
     fig.colorbar(im1, ax=axes[1], label="Predicted std")
 
+    im2 = axes[2].imshow(
+        reward_grid,
+        extent=[minx, maxx, miny, maxy],
+        origin="lower",
+    )
+    axes[2].set_title(title)
+    fig.colorbar(im2, ax=axes[2], label="Reward score")
+
     sc = axes[2].scatter(
         candidates[:, 0],
         candidates[:, 1],
         c=scores,
         s=45,
+        edgecolors="black",
+        vmin=np.nanmin(reward_grid),
+        vmax=np.nanmax(reward_grid),
     )
-    axes[2].set_title(title)
-    fig.colorbar(sc, ax=axes[2], label="Reward score")
 
     if region is not None:
         bx, by = region.exterior.xy
@@ -203,47 +232,55 @@ def plot_candidate_scores(
 
     return scores
 
-def plot_candidate_paths(
+def path_from_node(node):
+    """
+    Reconstruct path by walking parent links.
+    """
+    path = []
+
+    while node is not None and node.parent is not None:
+        path.append(np.asarray(node.current_pos, dtype=float).reshape(2,))
+        node = node.parent
+
+    path.reverse()
+    return np.asarray(path)
+
+
+def plot_tree_candidate_paths(
     region,
-    candidate_paths,
-    scores=None,
-    best_path=None,
+    leaf_nodes,
+    best_node=None,
     current_pos=None,
     visited_pts=None,
-    max_paths_to_plot=200,
-    title="Candidate paths",
+    max_paths_to_plot=300,
+    title="Candidate paths by score",
 ):
-    import numpy as np
-    import matplotlib.pyplot as plt
+    leaf_nodes = [n for n in leaf_nodes if n is not None and len(n.path) > 0]
 
-    candidate_paths = np.asarray(candidate_paths, dtype=float)
+    if len(leaf_nodes) == 0:
+        print("No candidate paths to plot.")
+        return
 
-    fig, ax = plt.subplots(figsize=(7, 6))
+    scores = np.array([float(np.asarray(n.score).item()) for n in leaf_nodes])
+
+    # Downsample plotted paths if needed
+    idxs = np.arange(len(leaf_nodes))
+    if len(idxs) > max_paths_to_plot:
+        idxs = np.random.choice(idxs, size=max_paths_to_plot, replace=False)
+
+    fig, ax = plt.subplots(figsize=(8, 7))
 
     # Region boundary
     bx, by = region.exterior.xy
     ax.plot(bx, by, linewidth=2)
 
-    # Current trajectory
-    if visited_pts is not None:
-        visited_pts = np.asarray(visited_pts, dtype=float).reshape(-1, 2)
-        ax.plot(visited_pts[:, 0], visited_pts[:, 1], marker="o", linewidth=2, label="visited")
+    norm = plt.Normalize(np.nanmin(scores), np.nanmax(scores))
+    cmap = plt.get_cmap('viridis')
 
-    # Downsample paths for readability
-    n_paths = len(candidate_paths)
-    idxs = np.arange(n_paths)
-
-    if n_paths > max_paths_to_plot:
-        idxs = np.random.choice(idxs, size=max_paths_to_plot, replace=False)
-
-    # Optional score coloring
-    if scores is not None:
-        scores = np.asarray(scores, dtype=float)
-        norm = plt.Normalize(scores.min(), scores.max())
-        cmap = plt.cm.get_cmap('viridis')
-
+    # Plot candidate paths
     for idx in idxs:
-        path = candidate_paths[idx]
+        node = leaf_nodes[idx]
+        path = path_from_node(node)
 
         if current_pos is not None:
             start = np.asarray(current_pos, dtype=float).reshape(1, 2)
@@ -251,25 +288,40 @@ def plot_candidate_paths(
         else:
             path_plot = path
 
-        if scores is not None:
-            ax.plot(
-                path_plot[:, 0],
-                path_plot[:, 1],
-                alpha=0.25,
-                linewidth=1,
-                color=cmap(norm(scores[idx])),
-            )
-        else:
-            ax.plot(
-                path_plot[:, 0],
-                path_plot[:, 1],
-                alpha=0.15,
-                linewidth=1,
-            )
+        ax.plot(
+            path_plot[:, 0],
+            path_plot[:, 1],
+            color=cmap(norm(scores[idx])),
+            alpha=0.25,
+            linewidth=1.5,
+        )
+
+    # Plot previous real trajectory
+    if visited_pts is not None:
+        visited_pts = np.asarray(visited_pts, dtype=float).reshape(-1, 2)
+        ax.plot(
+            visited_pts[:, 0],
+            visited_pts[:, 1],
+            marker="o",
+            linewidth=2,
+            label="visited trajectory",
+        )
+
+    # Current position
+    if current_pos is not None:
+        current_pos = np.asarray(current_pos, dtype=float).reshape(2,)
+        ax.scatter(
+            current_pos[0],
+            current_pos[1],
+            marker="x",
+            s=120,
+            label="current position",
+            zorder=10,
+        )
 
     # Highlight best path
-    if best_path is not None:
-        best_path = np.asarray(best_path, dtype=float).reshape(-1, 2)
+    if best_node is not None and len(best_node.path) > 0:
+        best_path = path_from_node(best_node)
 
         if current_pos is not None:
             start = np.asarray(current_pos, dtype=float).reshape(1, 2)
@@ -279,23 +331,20 @@ def plot_candidate_paths(
             best_path[:, 0],
             best_path[:, 1],
             marker="o",
-            linewidth=3,
-            label="best path",
+            linewidth=4,
+            color="red",
+            label=f"best path: {float(np.asarray(best_node.score).item()):.3f}",
+            zorder=20,
         )
 
-    if current_pos is not None:
-        current_pos = np.asarray(current_pos, dtype=float).reshape(2,)
-        ax.scatter(current_pos[0], current_pos[1], marker="x", s=100, label="current")
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    fig.colorbar(sm, ax=ax, label="Path score")
 
     ax.set_title(title)
     ax.set_aspect("equal")
     ax.set_xlabel("x offset (m)")
     ax.set_ylabel("y offset (m)")
     ax.legend()
-
-    if scores is not None:
-        sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
-        fig.colorbar(sm, ax=ax, label="path score")
 
     plt.tight_layout()
     plt.show()

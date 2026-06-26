@@ -12,7 +12,7 @@ class CompositeReward:
         reward = 0
         reward += self.w_mean * mean
         reward += self.w_std * std
-        reward += self.w_dist * np.linalg.norm(current_pos - target_pos)
+        reward -= self.w_dist * np.linalg.norm(current_pos - target_pos)
         reward += self.w_mean_grad * mean_grad
         return reward
 
@@ -49,3 +49,32 @@ def compute_cost(current,target,sample=True):
     if sample:
         return SAMPLE_COST + dist * COST_PER_METER
     return dist * COST_PER_METER
+
+import numpy as np
+from shapely.geometry import Point
+
+def get_variance_metrics(model, region, resolution=5.0):
+    minx, miny, maxx, maxy = region.bounds
+
+    xs = np.arange(minx, maxx + resolution, resolution)
+    ys = np.arange(miny, maxy + resolution, resolution)
+    xx, yy = np.meshgrid(xs, ys)
+
+    grid = np.column_stack([xx.ravel(), yy.ravel()])
+    inside = np.array([region.contains(Point(x, y)) for x, y in grid])
+
+    grid_inside = grid[inside]
+
+    if len(grid_inside) == 0:
+        return {
+            "avg_variance": np.nan,
+            "max_variance": np.nan
+        }
+
+    _, std = model.gp.predict(grid_inside, return_std=True)
+    var = std**2
+
+    return {
+        "avg_variance": float(np.mean(var)),
+        "max_variance": float(np.max(var))
+    }

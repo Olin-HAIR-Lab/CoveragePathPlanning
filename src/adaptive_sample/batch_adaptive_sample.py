@@ -53,11 +53,12 @@ def main():
     n_steps = [3]
     n_candidates = [10]
     n_trials = 10
-    #dist_weights = [0, 0.001, 0.005, 0.01]
-    dist_weights = [0.01]
-    length_scale_mins = [0.1, 5.0, 10.0, 15.0, 20.0]
+    dist_weights = [0, 0.0005, 0.001, 0.005, 0.01]
+    #dist_weights = [0.001]
+    #length_scale_mins = [0.1, 5.0, 10.0, 15.0, 20.0]
+    length_scale_mins = [10.0]
 
-    out_path = "adaptive_sample_length_scale_min_2.csv"
+    out_path = "adaptive_sample_dist_weights.csv"
 
     jobs = [
         (data_path, ns, nc, wd, seed, min_ls)

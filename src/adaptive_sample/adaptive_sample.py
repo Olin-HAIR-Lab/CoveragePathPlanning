@@ -1,24 +1,18 @@
 import numpy as np
-import yaml
-import time
 import copy
-import os
 import sys
 import pandas as pd
 from dataclasses import dataclass
-from pathlib import Path
 import geopandas as gpd
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon
 from shapely.affinity import translate
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
 
-from candidate_actions import generate_variance_candidates, generate_candidate_paths
+from candidate_actions import generate_variance_candidates
 from model import MoistureModel
 from sample_ground_truth import sample_from_ground_truth, get_err
-from rewards import compute_cost, CompositeReward
-from planner import GreedyVariancePlanner, VarianceMinusDistancePlanner, score_virtual_path, NStepLookaheadPlanner
-from visualize import plot_results, plot_candidate_scores, plot_candidate_paths
+from rewards import compute_cost, CompositeReward, get_variance_metrics
+from planner import NStepLookaheadPlanner
+from visualize import plot_results, plot_candidate_scores, plot_tree_candidate_paths
 
 from lloydsAlgorithm import Lloyd_algoritm
 from vehicleRoutingProblem import solve_vrp_balanced, extract_paths
@@ -88,10 +82,8 @@ def load_map_data(data_path):
 def run_simulation(config):
 
     # Load the map
-    points, vertices, x_home, y_home = load_map_data(config.data_path) 
+    points, vertices, _, _ = load_map_data(config.data_path) 
     region = Polygon(vertices)
-    
-    start_time = time.time()
     budget_remaining = config.budget
 
     rwd_fun = CompositeReward(
@@ -117,7 +109,7 @@ def run_simulation(config):
         ll_iter, config.presample_pts, region, ll_partition, ll_seed, log=config.make_plots
     )
     
-    final_tessellation = history_tessell[-1]
+    _ = history_tessell[-1]
     final_dots = history_dots[-1]
 
     coords = np.vstack([current_position, final_dots.copy()])
@@ -176,6 +168,8 @@ def run_simulation(config):
         candidates,_ = generate_variance_candidates(
             gp=model.gp, 
             region=region, 
+            rwd_fun=rwd_fun,
+            current_pos=current_position,
             resolution=config.grid_spacing,
             n_candidates=config.n_candidates, 
             min_spacing=config.min_candidate_spacing
@@ -194,7 +188,7 @@ def run_simulation(config):
             )
             print(f"Score range: {scores.min():.3f} to {scores.max():.3f}")
 
-        plan = planner.plan(
+        plan, leaf_nodes, best_node = planner.plan(
             model=model,
             candidates=candidates,
             current_pos=current_position,
@@ -209,6 +203,14 @@ def run_simulation(config):
         next_location = plan[0]
         if config.make_plots:
             print(f"Plan[0]: {plan[0]}")
+            plot_tree_candidate_paths(
+                region=region,
+                leaf_nodes=leaf_nodes,
+                best_node=best_node,
+                current_pos=current_position,
+                visited_pts=visited_pts,
+                max_paths_to_plot=300,
+            )
 
         sampled_X,sampled_y = sample_from_ground_truth(next_location,points)
 
@@ -220,7 +222,7 @@ def run_simulation(config):
     
     if config.make_plots:
         print(f"Finished! Final trajectory: {visited_pts}")
-        print(f"Retraining hyperparameters")
+        print("Retraining hyperparameters")
     model.retrain_hyperparameters()
 
     if config.make_plots:
@@ -232,7 +234,7 @@ def run_simulation(config):
             resolution=config.grid_spacing,
         )
     
-    rmse,nrmse,nrmse_std,rmse_over_std = get_err(gp=model.gp, points=points)
+    rmse,nrmse,_,rmse_over_std = get_err(gp=model.gp, points=points)
     data_range = np.ptp(points['Moisture'].to_numpy())
     data_std = np.std(points['Moisture'].to_numpy())
     lengthscale = model.gp.kernel_.get_params()['k1__length_scale']
@@ -259,12 +261,16 @@ def run_simulation(config):
         "region_area": region.area,
         "path": config.data_path
     }
+    results |= get_variance_metrics(model=model,region=region,resolution=5.0)
     if config.make_plots:
         print(results)
     result_df = pd.DataFrame([results])
     return result_df
         
 if __name__ == "__main__":
-    config = SimulationConfig(data_path=sys.argv[1])
-    config.make_plots = True
-    run_simulation(config)
+    config_in = SimulationConfig(data_path=sys.argv[1])
+    config_in.make_plots = True
+    config_in.min_length_scale = 20.0
+    config_in.dist_weight = 0.001
+    config_in.grad_mean_weight = 0.1
+    run_simulation(config=config_in)
