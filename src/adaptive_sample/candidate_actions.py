@@ -58,6 +58,7 @@ def generate_variance_candidates(
     grid_inside = full_grid[inside]
 
     pred_mean, pred_std = gp.predict(grid_inside, return_std=True)
+    avg_mean = np.mean(pred_mean.flatten())
 
     mean_grid = np.full(len(full_grid), np.nan)
     std_grid = np.full(len(full_grid), np.nan)
@@ -83,6 +84,7 @@ def generate_variance_candidates(
 
             reward_grid[row, col] = rwd_fun.evaluate(
                 float(mean_grid[row, col]),
+                avg_mean,
                 float(std_grid[row, col]),
                 float(grad_mean_grid[row, col]),
                 current_pos,
@@ -119,7 +121,7 @@ def generate_variance_candidates(
         if len(candidates) >= n_candidates:
             break
 
-    return np.asarray(candidates), np.asarray(candidate_scores)
+    return np.asarray(candidates), np.asarray(candidate_scores), avg_mean
 
 def generate_candidate_paths(candidates, n_step, count):
     """

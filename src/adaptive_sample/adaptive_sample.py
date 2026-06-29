@@ -165,7 +165,7 @@ def run_simulation(config):
         if config.make_plots:
             print(f"Budget remaining: {budget_remaining}")
         #gp.fit(real_X, real_y)
-        candidates,_ = generate_variance_candidates(
+        candidates,_,avg_mean = generate_variance_candidates(
             gp=model.gp, 
             region=region, 
             rwd_fun=rwd_fun,
@@ -184,6 +184,7 @@ def run_simulation(config):
                 current_pos=current_position,
                 region=region,
                 visited_pts=visited_pts,
+                field_mean=avg_mean,
                 title=f"Candidate rewards, budget={budget_remaining:.1f}",
             )
             print(f"Score range: {scores.min():.3f} to {scores.max():.3f}")
@@ -193,6 +194,7 @@ def run_simulation(config):
             candidates=candidates,
             current_pos=current_position,
             budget_remaining=budget_remaining,
+            field_mean=avg_mean,
             log=config.make_plots
         )
         if len(plan) == 0:
@@ -270,7 +272,9 @@ def run_simulation(config):
 if __name__ == "__main__":
     config_in = SimulationConfig(data_path=sys.argv[1])
     config_in.make_plots = True
-    config_in.min_length_scale = 20.0
-    config_in.dist_weight = 0.001
-    config_in.grad_mean_weight = 0.1
+    config_in.min_length_scale = 40.0
+    config_in.dist_weight = 0.0005
+    config_in.grad_mean_weight = 0.0
+    config_in.far_from_mean_weight = 0.1
+    config_in.std_weight = 1.0
     run_simulation(config=config_in)

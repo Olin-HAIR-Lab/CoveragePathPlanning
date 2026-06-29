@@ -104,6 +104,7 @@ def plot_candidate_scores(
     rwd_fun,
     candidates,
     current_pos,
+    field_mean,
     region=None,
     visited_pts=None,
     title="Candidate reward scores",
@@ -117,7 +118,7 @@ def plot_candidate_scores(
     cand_grad_means = np.gradient(cand_means)
 
     scores = np.array([
-        rwd_fun.evaluate(float(mean), float(std), float(grad_mean), current_pos, candidate)
+        rwd_fun.evaluate(float(mean), field_mean, float(std), float(grad_mean), current_pos, candidate)
         for mean, std, grad_mean, candidate in zip(cand_means, cand_stds, cand_grad_means, candidates)
     ])
 
@@ -154,6 +155,7 @@ def plot_candidate_scores(
 
             reward_grid[row, col] = rwd_fun.evaluate(
                 float(mean_grid[row, col]),
+                field_mean,
                 float(std_grid[row, col]),
                 float(grad_mean_grid[row, col]),
                 current_pos,

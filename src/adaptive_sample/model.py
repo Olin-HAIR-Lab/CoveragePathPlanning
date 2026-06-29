@@ -36,7 +36,7 @@ class MoistureModel:
         self.y = np.concatenate([self.y, [y_in]])
 
         # Fit the data, retraining hyperparameters if need be
-        if (not virtual) and self.obs_since_retrain % 5 == 0:
+        if (not virtual) and self.obs_since_retrain % 1 == 0:
             self.retrain_hyperparameters()
             self.obs_since_retrain = 0
         else:

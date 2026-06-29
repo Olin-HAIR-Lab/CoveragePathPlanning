@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class CompositeReward:
     def __init__(self,w_mean,w_std,w_mean_grad,w_dist,w_far_from_mean):
         self.w_mean = w_mean
@@ -8,12 +9,13 @@ class CompositeReward:
         self.w_dist = w_dist
         self.w_far_from_mean = w_far_from_mean
     
-    def evaluate(self, mean, std, mean_grad, current_pos, target_pos):
+    def evaluate(self, mean, mean_field, std, mean_grad, current_pos, target_pos):
         reward = 0
         reward += self.w_mean * mean
         reward += self.w_std * std
         reward -= self.w_dist * np.linalg.norm(current_pos - target_pos)
         reward += self.w_mean_grad * mean_grad
+        reward += self.w_far_from_mean * abs(mean - mean_field)
         return reward
 
 

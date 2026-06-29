@@ -14,7 +14,8 @@ warnings.filterwarnings("ignore", category=ConvergenceWarning)
 warnings.filterwarnings("ignore", category=PenaltyBoundWarning)
 
 def run_one(args):
-    data_path, ns, nc, wd, seed, min_ls = args
+    data_path, ns, nc, weight, seed, min_ls = args
+    m_w, std_w, grad_m_w, dst_w, far_w = weight
 
     config = SimulationConfig(
         data_path=data_path,
@@ -22,7 +23,11 @@ def run_one(args):
         seed=seed,
         n_steps=ns,
         n_candidates=nc,
-        dist_weight = wd,
+        mean_weight=m_w,
+        std_weight=std_w,
+        grad_mean_weight=grad_m_w,
+        dist_weight=dst_w,
+        far_from_mean_weight=far_w,
         min_length_scale=min_ls
     )
     return run_simulation(config)
@@ -53,17 +58,31 @@ def main():
     n_steps = [3]
     n_candidates = [10]
     n_trials = 10
-    dist_weights = [0, 0.0005, 0.001, 0.005, 0.01]
-    #dist_weights = [0.001]
-    #length_scale_mins = [0.1, 5.0, 10.0, 15.0, 20.0]
-    length_scale_mins = [10.0]
+    #dist_weights = [0, 0.0005, 0.001, 0.005, 0.01]
+    #dist_weights = [0.0005]
+    #length_scale_mins = [20.0, 30.0, 40.0, 50.0, 60.0, 70.0]
+    length_scale_mins = [20.0]
+    # weights = [
+    #     [0.0, 1.0, 0.01, 0.0005, 0.0],
+    #     [0.0, 1.0, 0.1, 0.0005, 0.0],
+    #     [0.0, 1.0, 1.0, 0.0005, 0.0],
+    #     [0.0, 1.0, 10.0, 0.0005, 0.0],
+    #     [0.0, 1.0, 100.0, 0.0005, 0.0]
+    # ]
+    weights = [
+        [0.0, 1.0, 0.0, 0.0005, 0.0],
+        [0.0, 1.0, 0.0, 0.0005, 0.01],
+        [0.0, 1.0, 0.0, 0.0005, 0.1],
+        [0.0, 1.0, 0.0, 0.0005, 0.5],
+        [0.0, 1.0, 0.0, 0.0005, 1.0]
+    ]
 
-    out_path = "adaptive_sample_dist_weights.csv"
+    out_path = "adaptive_sample_far_from_mean.csv"
 
     jobs = [
-        (data_path, ns, nc, wd, seed, min_ls)
-        for data_path, ns, nc, wd, min_ls in product(
-            data_paths, n_steps, n_candidates, dist_weights, length_scale_mins
+        (data_path, ns, nc, weight, seed, min_ls)
+        for data_path, ns, nc, weight, min_ls in product(
+            data_paths, n_steps, n_candidates, weights, length_scale_mins
         )
         for seed in range(n_trials)
     ]
@@ -85,7 +104,8 @@ def main():
                 time_per_job = time_to_now / k
                 est_time_remaining = (len(jobs) - k) * time_per_job
 
-                print(f"{percent_done:.1f}% complete ({k}/{len(jobs)}) in {time_to_now:.1f}; estimating {est_time_remaining // 60:.0f}:{est_time_remaining % 60:.0f} remaining.")
+                if (k+1) % max_workers == 0:
+                    print(f"{percent_done:.1f}% complete ({k}/{len(jobs)}) in {time_to_now:.1f}; estimating {est_time_remaining // 60:.0f}:{est_time_remaining % 60:.0f} remaining.")
 
                 # Save partial progress each completed run
                 pd.concat(results, ignore_index=True).to_csv(out_path, index=False)

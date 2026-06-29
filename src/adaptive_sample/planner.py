@@ -4,6 +4,7 @@ import copy
 from dataclasses import dataclass
 from rewards import compute_cost, MaximumVarianceReward, VarianceMinusDistanceReward
 from model import MoistureModel
+from shapely.geometry import Point
 
 @dataclass
 class TreeNode:
@@ -45,7 +46,8 @@ class NStepLookaheadPlanner:
     def __init__(self,rwd_fun,n_steps=3):
         self.n_steps = n_steps
         self.rwd_fun = rwd_fun
-    def plan(self, model, candidates, current_pos, budget_remaining, log=False):
+    
+    def plan(self, model, candidates, current_pos, budget_remaining, field_mean, log=False):
         # Start with the root node (zero reward, hasn't traveled at all)
         root = TreeNode(
             parent=None,
@@ -97,7 +99,7 @@ class NStepLookaheadPlanner:
                         dmean_dy[1, 1],
                     ]))
 
-                    reward = self.rwd_fun.evaluate(mean, std, grad_mean, node.current_pos, candidate)
+                    reward = self.rwd_fun.evaluate(mean, field_mean, std, grad_mean, node.current_pos, candidate)
 
                     child_model.add_observation(candidate, mean, virtual=True)
 
