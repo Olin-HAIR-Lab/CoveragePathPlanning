@@ -12,7 +12,7 @@ from model import MoistureModel
 from sample_ground_truth import sample_from_ground_truth, get_err
 from rewards import compute_cost, CompositeReward, get_variance_metrics, SAMPLE_COST
 from planner import NStepLookaheadPlanner
-from visualize import plot_results, plot_candidate_scores, plot_tree_candidate_paths
+from visualize import plot_results, plot_candidate_scores, plot_tree_candidate_paths, nrmse_over_dist
 from adaptive_sample import SimulationConfig, load_map_data
 
 from lloydsAlgorithm import Lloyd_algoritm
@@ -33,6 +33,7 @@ def run_simulation(config):
     success = False
     num_pts = budget_remaining // SAMPLE_COST
     while not success:
+        fig_7_data = pd.DataFrame()
         model = MoistureModel(min_length_scale=config.min_length_scale)
         budget_remaining = config.budget
 
@@ -90,11 +91,21 @@ def run_simulation(config):
 
         ## For now, assume we don't sample at our starting pos, but we do sample at each presample pos
         # We need to count the budget spent as well
+        visited_count = 1
         for pt in visited_pts[1:,:]:
             initial_sample_pos, initial_sample_value = sample_from_ground_truth(pt, points)
             model.add_observation(initial_sample_pos, initial_sample_value, virtual=False)
 
             budget_remaining -= compute_cost(current_position, pt)
+
+            if config.make_figure_7:
+                info = nrmse_over_dist(points=points, model=model, visited_pts=visited_pts[0:visited_count,:])
+                info |= {
+                    "path": config.data_path,
+                    "presample": True
+                }
+                fig_7_data = pd.concat([fig_7_data,pd.DataFrame([info])],ignore_index=True)
+                visited_count += 1
 
         if budget_remaining < 0:
             print(f"Too expensive: budget at {budget_remaining} for {num_pts} points. Trying again...")
@@ -149,10 +160,13 @@ def run_simulation(config):
     results |= get_variance_metrics(model=model,region=region,resolution=5.0)
     if config.make_plots:
         print(results)
+    if config.make_figure_7:
+        print(fig_7_data)
     result_df = pd.DataFrame([results])
     return result_df
         
 if __name__ == "__main__":
     config_in = SimulationConfig(data_path=sys.argv[1])
     config_in.make_plots = True
+    config_in.make_figure_y = True 
     run_simulation(config=config_in)

@@ -5,6 +5,23 @@ import matplotlib.colors as colors
 
 from sample_ground_truth import get_err
 
+def nrmse_over_dist(points, model, visited_pts):
+    # Get the error in the model prediction
+    _, nrmse, _, _ = get_err(gp=model.gp, points=points)
+
+    # Get the distance traveled
+    dist_traveled = 0
+    last_pt = visited_pts[0,:]
+    for pt in visited_pts[1:,:]:
+        dist_traveled += np.linalg.norm(pt - last_pt)
+        last_pt = pt
+    
+    return {
+        "dist": dist_traveled,
+        "nrmse": nrmse
+    }
+
+
 def plot_results(points, region, model, visited_pts, resolution=2.0):
     minx, miny, maxx, maxy = region.bounds
 

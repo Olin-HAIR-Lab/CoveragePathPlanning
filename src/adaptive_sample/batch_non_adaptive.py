@@ -28,36 +28,44 @@ def run_one(args):
         grad_mean_weight=0.0,
         dist_weight=0.0,
         far_from_mean_weight=0.0,
-        min_length_scale=min_ls
+        min_length_scale=min_ls,
+        lloyd_iterations=9
     )
     return run_simulation(config)
 
 def main():
+    # data_paths = [
+    #     "../scripts/region_previews_farm12/region12_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm12/region16_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm12/region33_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm12/region34_data_filtered.gpkg",
+
+    #     "../scripts/region_previews_farm03/region20_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm03/region22_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm03/region24_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm03/region15_data_filtered.gpkg",
+
+    #     "../scripts/region_previews_farm12/region5_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm12/region6_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm12/region7_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm12/region10_data_filtered.gpkg",
+
+    #     "../scripts/region_previews_farm03/region9_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm03/region10_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm03/region11_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm03/region12_data_filtered.gpkg",
+    # ]
+
     data_paths = [
-        "../scripts/region_previews_farm12/region12_data_filtered.gpkg",
-        "../scripts/region_previews_farm12/region16_data_filtered.gpkg",
-        "../scripts/region_previews_farm12/region33_data_filtered.gpkg",
-        "../scripts/region_previews_farm12/region34_data_filtered.gpkg",
-
-        "../scripts/region_previews_farm03/region20_data_filtered.gpkg",
-        "../scripts/region_previews_farm03/region22_data_filtered.gpkg",
-        "../scripts/region_previews_farm03/region24_data_filtered.gpkg",
-        "../scripts/region_previews_farm03/region15_data_filtered.gpkg",
-
-        "../scripts/region_previews_farm12/region5_data_filtered.gpkg",
-        "../scripts/region_previews_farm12/region6_data_filtered.gpkg",
-        "../scripts/region_previews_farm12/region7_data_filtered.gpkg",
-        "../scripts/region_previews_farm12/region10_data_filtered.gpkg",
-
-        "../scripts/region_previews_farm03/region9_data_filtered.gpkg",
-        "../scripts/region_previews_farm03/region10_data_filtered.gpkg",
-        "../scripts/region_previews_farm03/region11_data_filtered.gpkg",
-        "../scripts/region_previews_farm03/region12_data_filtered.gpkg",
+        "../scripts/region_previews_farm06/region8_data_filtered.gpkg",
+        "../scripts/region_previews_farm06/region9_data_filtered.gpkg",
+        "../scripts/region_previews_farm06/region11_data_filtered.gpkg",
+        "../scripts/region_previews_farm06/region12_data_filtered.gpkg"
     ]
 
     n_trials = 10
     length_scale_mins = [20.0]
-    out_path = "non_adaptive_baseline.csv"
+    out_path = "farm06_non_adaptive.csv"
 
     jobs = [
         (data_path, seed, min_ls)

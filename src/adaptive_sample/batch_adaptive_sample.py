@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore", category=ConvergenceWarning)
 warnings.filterwarnings("ignore", category=PenaltyBoundWarning)
 
 def run_one(args):
-    data_path, ns, nc, weight, seed, min_ls = args
+    data_path, ns, nc, weight, seed, min_ls, min_cs = args
     m_w, std_w, grad_m_w, dst_w, far_w = weight
 
     config = SimulationConfig(
@@ -28,7 +28,8 @@ def run_one(args):
         grad_mean_weight=grad_m_w,
         dist_weight=dst_w,
         far_from_mean_weight=far_w,
-        min_length_scale=min_ls
+        min_length_scale=min_ls,
+        min_candidate_spacing=min_cs
     )
     return run_simulation(config)
 
@@ -55,9 +56,11 @@ def main():
         "../scripts/region_previews_farm03/region12_data_filtered.gpkg",
     ]
 
+    #n_steps = [4, 3, 2, 1]
     n_steps = [3]
-    n_candidates = [10]
-    n_trials = 10
+    n_candidates = [10, 15]
+    min_cand_spacings = [10, 20]
+    n_trials = 20
     #dist_weights = [0, 0.0005, 0.001, 0.005, 0.01]
     #dist_weights = [0.0005]
     #length_scale_mins = [20.0, 30.0, 40.0, 50.0, 60.0, 70.0]
@@ -70,19 +73,20 @@ def main():
     #     [0.0, 1.0, 100.0, 0.0005, 0.0]
     # ]
     weights = [
-        [0.0, 1.0, 0.0, 0.0005, 0.0],
-        [0.0, 1.0, 0.0, 0.0005, 0.01],
-        [0.0, 1.0, 0.0, 0.0005, 0.1],
-        [0.0, 1.0, 0.0, 0.0005, 0.5],
-        [0.0, 1.0, 0.0, 0.0005, 1.0]
+        [0.0, 1.0, 0.1, 0.0, 0.0],
+        [0.0, 1.0, 0.1, 0.0001, 0.0],
+        [0.0, 1.0, 0.1, 0.0002, 0.0],
+        [0.0, 1.0, 0.1, 0.0003, 0.0],
+        [0.0, 1.0, 0.1, 0.0004, 0.0],
+        [0.0, 1.0, 0.1, 0.0005, 0.0]
     ]
 
-    out_path = "adaptive_sample_far_from_mean.csv"
+    out_path = "adaptive_sample_diff_small_lengths_with_grad.csv"
 
     jobs = [
-        (data_path, ns, nc, weight, seed, min_ls)
-        for data_path, ns, nc, weight, min_ls in product(
-            data_paths, n_steps, n_candidates, weights, length_scale_mins
+        (data_path, ns, nc, weight, seed, min_ls, min_cs)
+        for data_path, ns, nc, weight, min_ls, min_cs in product(
+            data_paths, n_steps, n_candidates, weights, length_scale_mins, min_cand_spacings
         )
         for seed in range(n_trials)
     ]

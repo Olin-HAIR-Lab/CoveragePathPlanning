@@ -1,5 +1,6 @@
 import numpy as np
 import copy
+from datetime import datetime
 import sys
 import pandas as pd
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ from model import MoistureModel
 from sample_ground_truth import sample_from_ground_truth, get_err
 from rewards import compute_cost, CompositeReward, get_variance_metrics
 from planner import NStepLookaheadPlanner
-from visualize import plot_results, plot_candidate_scores, plot_tree_candidate_paths
+from visualize import plot_results, plot_candidate_scores, plot_tree_candidate_paths, nrmse_over_dist
 
 from lloydsAlgorithm import Lloyd_algoritm
 from vehicleRoutingProblem import solve_vrp_balanced, extract_paths
@@ -36,6 +37,7 @@ class SimulationConfig:
     dist_weight: float = 0.005
     far_from_mean_weight: float = 0
     min_length_scale: float = 1.0
+    make_figure_7: bool = False
 
 # Map loading 
 def load_map_data(data_path):
@@ -86,6 +88,8 @@ def run_simulation(config):
     region = Polygon(vertices)
     budget_remaining = config.budget
 
+    fig_7_data = pd.DataFrame()
+
     rwd_fun = CompositeReward(
         w_mean=config.mean_weight,
         w_std=config.std_weight,
@@ -95,7 +99,7 @@ def run_simulation(config):
     )
 
     model = MoistureModel(min_length_scale=config.min_length_scale)
-    planner = NStepLookaheadPlanner(n_steps=3,rwd_fun=rwd_fun)
+    planner = NStepLookaheadPlanner(n_steps=config.n_steps,rwd_fun=rwd_fun)
 
     # Initialize
     centroid = region.centroid
@@ -153,11 +157,21 @@ def run_simulation(config):
 
     ## For now, assume we don't sample at our starting pos, but we do sample at each presample pos
     # We need to count the budget spent as well
+    visited_count = 1
     for pt in visited_pts[1:,:]:
         initial_sample_pos, initial_sample_value = sample_from_ground_truth(pt, points)
         model.add_observation(initial_sample_pos, initial_sample_value, virtual=False)
 
         budget_remaining -= compute_cost(current_position, pt)
+
+        if config.make_figure_7:
+            info = nrmse_over_dist(points=points, model=model, visited_pts=visited_pts[0:visited_count,:])
+            info |= {
+                "path": config.data_path,
+                "presample": True
+            }
+            fig_7_data = pd.concat([fig_7_data,pd.DataFrame([info])],ignore_index=True)
+            visited_count += 1
     
     current_position = visited_pts[-1,:]
 
@@ -218,6 +232,14 @@ def run_simulation(config):
 
         model.add_observation(sampled_X,sampled_y,virtual=False)
 
+        if config.make_figure_7:
+            info = nrmse_over_dist(points=points, model=model, visited_pts=visited_pts)
+            info |= {
+                "path": config.data_path,
+                "presample": False
+            }
+            fig_7_data = pd.concat([fig_7_data,pd.DataFrame([info])],ignore_index=True)
+
         budget_remaining -= compute_cost(current_position, next_location, sample=True)
         current_position = next_location
         visited_pts = np.vstack([visited_pts, current_position])
@@ -266,15 +288,21 @@ def run_simulation(config):
     results |= get_variance_metrics(model=model,region=region,resolution=5.0)
     if config.make_plots:
         print(results)
+    if config.make_figure_7:
+        print(fig_7_data)
+        fig_7_data.to_csv(f"fig7/data_{datetime.now().strftime("%Y%m%d %H:%M:%S")}.csv")
     result_df = pd.DataFrame([results])
+
     return result_df
         
 if __name__ == "__main__":
     config_in = SimulationConfig(data_path=sys.argv[1])
     config_in.make_plots = True
-    config_in.min_length_scale = 40.0
-    config_in.dist_weight = 0.0005
+    config_in.min_length_scale = 20.0
+    config_in.dist_weight = 0.0001
     config_in.grad_mean_weight = 0.0
-    config_in.far_from_mean_weight = 0.1
+    config_in.far_from_mean_weight = 0.0
+    config_in.presample_pts = 3
     config_in.std_weight = 1.0
+    config_in.make_figure_7 = True
     run_simulation(config=config_in)
