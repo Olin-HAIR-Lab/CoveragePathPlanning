@@ -10,7 +10,7 @@ from shapely.affinity import translate
 
 from candidate_actions import generate_variance_candidates
 from model import MoistureModel
-from sample_ground_truth import sample_from_ground_truth, get_err
+from sample_ground_truth import sample_from_ground_truth, get_err, sample_from_ground_truth_knn, make_interpolated_ground_truth_grid
 from rewards import compute_cost, CompositeReward, get_variance_metrics
 from planner import NStepLookaheadPlanner
 from visualize import plot_results, plot_candidate_scores, plot_tree_candidate_paths, nrmse_over_dist
@@ -23,7 +23,7 @@ class SimulationConfig:
     data_path: str
     n_steps: int = 3
     budget: float = 1000
-    grid_spacing: float = 5
+    grid_spacing: float = 2
     n_candidates: int = 10
     min_candidate_spacing: float = 20
     presample_pts: int = 3
@@ -101,6 +101,16 @@ def run_simulation(config):
     model = MoistureModel(min_length_scale=config.min_length_scale)
     planner = NStepLookaheadPlanner(n_steps=config.n_steps,rwd_fun=rwd_fun)
 
+    # ground truth grid is a GDF with a 'Moisture' field
+    ground_truth_grid = make_interpolated_ground_truth_grid(
+        points=points,
+        region=region,
+        resolution=config.grid_spacing,
+        k=4,
+        power=2,
+        max_dist=None
+    )
+
     # Initialize
     centroid = region.centroid
     current_position = np.array([centroid.x, centroid.y])
@@ -159,7 +169,7 @@ def run_simulation(config):
     # We need to count the budget spent as well
     visited_count = 1
     for pt in visited_pts[1:,:]:
-        initial_sample_pos, initial_sample_value = sample_from_ground_truth(pt, points)
+        initial_sample_pos, initial_sample_value = sample_from_ground_truth(pt, ground_truth_grid)
         model.add_observation(initial_sample_pos, initial_sample_value, virtual=False)
 
         budget_remaining -= compute_cost(current_position, pt)
@@ -217,23 +227,23 @@ def run_simulation(config):
             continue
 
         next_location = plan[0]
-        if config.make_plots:
-            print(f"Plan[0]: {plan[0]}")
-            plot_tree_candidate_paths(
-                region=region,
-                leaf_nodes=leaf_nodes,
-                best_node=best_node,
-                current_pos=current_position,
-                visited_pts=visited_pts,
-                max_paths_to_plot=300,
-            )
+        # if config.make_plots:
+        #     print(f"Plan[0]: {plan[0]}")
+        #     plot_tree_candidate_paths(
+        #         region=region,
+        #         leaf_nodes=leaf_nodes,
+        #         best_node=best_node,
+        #         current_pos=current_position,
+        #         visited_pts=visited_pts,
+        #         max_paths_to_plot=300,
+        #     )
 
-        sampled_X,sampled_y = sample_from_ground_truth(next_location,points)
+        sampled_X,sampled_y = sample_from_ground_truth(next_location,ground_truth_grid)
 
         model.add_observation(sampled_X,sampled_y,virtual=False)
 
         if config.make_figure_7:
-            info = nrmse_over_dist(points=points, model=model, visited_pts=visited_pts)
+            info = nrmse_over_dist(points=ground_truth_grid, model=model, visited_pts=visited_pts)
             info |= {
                 "path": config.data_path,
                 "presample": False
@@ -251,16 +261,17 @@ def run_simulation(config):
 
     if config.make_plots:
         plot_results(
-            points=points,
+            points=ground_truth_grid,
+            points_original=points,
             region=region,
             model=model,
             visited_pts=visited_pts,
             resolution=config.grid_spacing,
         )
     
-    rmse,nrmse,_,rmse_over_std = get_err(gp=model.gp, points=points)
-    data_range = np.ptp(points['Moisture'].to_numpy())
-    data_std = np.std(points['Moisture'].to_numpy())
+    rmse,nrmse,_,rmse_over_std = get_err(gp=model.gp, points=ground_truth_grid)
+    data_range = np.ptp(ground_truth_grid['Moisture'].to_numpy())
+    data_std = np.std(ground_truth_grid['Moisture'].to_numpy())
     lengthscale = model.gp.kernel_.get_params()['k1__length_scale']
     num_pts = visited_pts.shape[0]
     results = {
@@ -290,7 +301,7 @@ def run_simulation(config):
         print(results)
     if config.make_figure_7:
         print(fig_7_data)
-        fig_7_data.to_csv(f"fig7/data_{datetime.now().strftime("%Y%m%d %H:%M:%S")}.csv")
+        fig_7_data.to_csv(f"fig7/data_{datetime.now().strftime('%Y%m%d %H:%M:%S')}.csv")
     result_df = pd.DataFrame([results])
 
     return result_df
@@ -299,10 +310,11 @@ if __name__ == "__main__":
     config_in = SimulationConfig(data_path=sys.argv[1])
     config_in.make_plots = True
     config_in.min_length_scale = 20.0
-    config_in.dist_weight = 0.0001
-    config_in.grad_mean_weight = 0.0
+    config_in.dist_weight = 0.00001
+    config_in.grad_mean_weight = 0.1
     config_in.far_from_mean_weight = 0.0
     config_in.presample_pts = 3
+    config_in.budget = 1000
     config_in.std_weight = 1.0
-    config_in.make_figure_7 = True
+    config_in.make_figure_7 = False
     run_simulation(config=config_in)

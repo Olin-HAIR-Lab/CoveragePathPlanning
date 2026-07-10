@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from shapely import Point
 import matplotlib.colors as colors
 
-from sample_ground_truth import get_err
+from sample_ground_truth import get_err, sample_from_ground_truth_knn
 
 def nrmse_over_dist(points, model, visited_pts):
     # Get the error in the model prediction
@@ -21,8 +21,7 @@ def nrmse_over_dist(points, model, visited_pts):
         "nrmse": nrmse
     }
 
-
-def plot_results(points, region, model, visited_pts, resolution=2.0):
+def plot_results(points_original, points, region, model, visited_pts, resolution=1.0, interp_k=7, interp_power=2):
     minx, miny, maxx, maxy = region.bounds
 
     xs = np.arange(minx, maxx + resolution, resolution)
@@ -35,31 +34,54 @@ def plot_results(points, region, model, visited_pts, resolution=2.0):
     grid_inside = grid[inside]
 
     pred = np.full(len(grid), np.nan)
+    interp_gt = np.full(len(grid), np.nan)
 
     if len(model.y) > 0:
         pred_inside = model.gp.predict(grid_inside)
         pred[inside] = pred_inside
 
-    pred = pred.reshape(xx.shape)
+    # Interpolated ground truth: "what the robot would sample here"
+    _, interp_inside = sample_from_ground_truth_knn(
+        pos=grid_inside,
+        ground_truth_points=points,
+        k=interp_k,
+        power=interp_power,
+    )
+    interp_gt[inside] = interp_inside
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharex=True, sharey=True)
+    pred = pred.reshape(xx.shape)
+    interp_gt = interp_gt.reshape(xx.shape)
+
+    fig, axes = plt.subplots(2, 2, figsize=(10, 7), sharex=True, sharey=True, constrained_layout=True)
+    axes = axes.ravel()
 
     vmin = points["Moisture"].quantile(0.02)
     vmax = points["Moisture"].quantile(0.98)
     norm = colors.Normalize(vmin=vmin, vmax=vmax)
 
     # Get metrics
-    rmse,nrmse,nrmse_std,rmse_over_std = get_err(gp=model.gp, points=points)
+    rmse, nrmse, nrmse_std, rmse_over_std = get_err(gp=model.gp, points=points)
 
     # Original data
-    points.plot(
+    points_original.plot(
         ax=axes[0],
         column="Moisture",
-        markersize=3,
+        markersize=6,
+        cmap="RdYlGn",
+        norm=norm,
+        edgecolor='black', 
+        linewidth=0.5
+    )
+
+    # Interpolated ground truth
+    im_interp = axes[0].imshow(
+        interp_gt,
+        extent=[minx, maxx, miny, maxy],
+        origin="lower",
         cmap="RdYlGn",
         norm=norm,
     )
-    axes[0].set_title("Original moisture data")
+    axes[0].set_title("Interpolated ground truth with original data")
 
     # GP prediction
     im = axes[1].imshow(
@@ -71,9 +93,19 @@ def plot_results(points, region, model, visited_pts, resolution=2.0):
     )
     axes[1].set_title(f"Final GP prediction\n{nrmse:.3f} NRMSE")
 
+    # Squared error
+    err_grid = (pred - interp_gt) ** 2
+    im2 = axes[2].imshow(
+        err_grid,
+        extent=[minx, maxx, miny, maxy],
+        origin="lower",
+        cmap="plasma"
+    )
+    axes[2].set_title("Squared error between prediction and ground truth")
+
     # Trajectory
     points.plot(
-        ax=axes[2],
+        ax=axes[3],
         column="Moisture",
         markersize=2,
         cmap="RdYlGn",
@@ -83,28 +115,28 @@ def plot_results(points, region, model, visited_pts, resolution=2.0):
 
     visited_pts = np.asarray(visited_pts)
 
-    axes[2].plot(
+    axes[3].plot(
         visited_pts[:, 0],
         visited_pts[:, 1],
         marker="o",
         linewidth=2,
     )
-    axes[2].scatter(
+    axes[3].scatter(
         visited_pts[0, 0],
         visited_pts[0, 1],
         marker="s",
         s=80,
         label="start",
     )
-    axes[2].scatter(
+    axes[3].scatter(
         visited_pts[-1, 0],
         visited_pts[-1, 1],
         marker="*",
         s=120,
         label="end",
     )
-    axes[2].legend()
-    axes[2].set_title("Sample trajectory")
+    axes[3].legend()
+    axes[3].set_title("Sample trajectory")
 
     # Region boundary on all axes
     boundary_x, boundary_y = region.exterior.xy
@@ -114,8 +146,10 @@ def plot_results(points, region, model, visited_pts, resolution=2.0):
         ax.set_xlabel("x offset (m)")
         ax.set_ylabel("y offset (m)")
 
-    fig.colorbar(im, ax=axes, label="Moisture")
+    fig.colorbar(im_interp, ax=axes, label="Moisture")
     plt.show()
+    return
+
 def plot_candidate_scores(
     model,
     rwd_fun,

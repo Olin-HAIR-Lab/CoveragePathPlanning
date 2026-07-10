@@ -34,33 +34,51 @@ def run_one(args):
     return run_simulation(config)
 
 def main():
+    # data_paths = [
+    #     "../scripts/region_previews_farm12/region12_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm12/region16_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm12/region33_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm12/region34_data_filtered.gpkg",
+
+    #     "../scripts/region_previews_farm03/region20_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm03/region22_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm03/region24_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm03/region15_data_filtered.gpkg",
+
+    #     "../scripts/region_previews_farm12/region5_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm12/region6_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm12/region7_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm12/region10_data_filtered.gpkg",
+
+    #     "../scripts/region_previews_farm03/region9_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm03/region10_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm03/region11_data_filtered.gpkg",
+    #     "../scripts/region_previews_farm03/region12_data_filtered.gpkg",
+    # ]
     data_paths = [
-        "../scripts/region_previews_farm12/region12_data_filtered.gpkg",
-        "../scripts/region_previews_farm12/region16_data_filtered.gpkg",
-        "../scripts/region_previews_farm12/region33_data_filtered.gpkg",
-        "../scripts/region_previews_farm12/region34_data_filtered.gpkg",
-
-        "../scripts/region_previews_farm03/region20_data_filtered.gpkg",
-        "../scripts/region_previews_farm03/region22_data_filtered.gpkg",
-        "../scripts/region_previews_farm03/region24_data_filtered.gpkg",
-        "../scripts/region_previews_farm03/region15_data_filtered.gpkg",
-
-        "../scripts/region_previews_farm12/region5_data_filtered.gpkg",
-        "../scripts/region_previews_farm12/region6_data_filtered.gpkg",
-        "../scripts/region_previews_farm12/region7_data_filtered.gpkg",
-        "../scripts/region_previews_farm12/region10_data_filtered.gpkg",
-
-        "../scripts/region_previews_farm03/region9_data_filtered.gpkg",
-        "../scripts/region_previews_farm03/region10_data_filtered.gpkg",
-        "../scripts/region_previews_farm03/region11_data_filtered.gpkg",
-        "../scripts/region_previews_farm03/region12_data_filtered.gpkg",
+        "../dataset_2_curated/region16_data.gpkg",
+        "../dataset_2_curated/region18_data.gpkg",
+        "../dataset_2_curated/region29_data.gpkg",
+        "../dataset_2_curated/region43_data.gpkg",
+        "../dataset_2_curated/region47_data.gpkg",
+        "../dataset_2_curated/region51_data.gpkg",
+        "../dataset_2_curated/region54_data.gpkg",
+        "../dataset_2_curated/region65_data.gpkg",
+        "../dataset_2_curated/region66_data.gpkg",
+        "../dataset_2_curated/region102_data.gpkg",
+        "../dataset_2_curated/region109_data.gpkg",
+        "../dataset_2_curated/region118_data.gpkg",
+        "../dataset_2_curated/region134_data.gpkg",
+        "../dataset_2_curated/region161_data.gpkg",
+        "../dataset_2_curated/region244_data.gpkg",
+        "../dataset_2_curated/region263_data.gpkg"
     ]
 
     #n_steps = [4, 3, 2, 1]
     n_steps = [3]
-    n_candidates = [10, 15]
-    min_cand_spacings = [10, 20]
-    n_trials = 20
+    n_candidates = [10]
+    min_cand_spacings = [20]
+    n_trials = 10
     #dist_weights = [0, 0.0005, 0.001, 0.005, 0.01]
     #dist_weights = [0.0005]
     #length_scale_mins = [20.0, 30.0, 40.0, 50.0, 60.0, 70.0]
@@ -73,15 +91,15 @@ def main():
     #     [0.0, 1.0, 100.0, 0.0005, 0.0]
     # ]
     weights = [
+        [0.0, 1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0001, 0.0],
+        [0.0, 1.0, 0.0, 0.0005, 0.0],
         [0.0, 1.0, 0.1, 0.0, 0.0],
         [0.0, 1.0, 0.1, 0.0001, 0.0],
-        [0.0, 1.0, 0.1, 0.0002, 0.0],
-        [0.0, 1.0, 0.1, 0.0003, 0.0],
-        [0.0, 1.0, 0.1, 0.0004, 0.0],
         [0.0, 1.0, 0.1, 0.0005, 0.0]
     ]
 
-    out_path = "adaptive_sample_diff_small_lengths_with_grad.csv"
+    out_path = "adaptive_sample_dataset_2_interpolated.csv"
 
     jobs = [
         (data_path, ns, nc, weight, seed, min_ls, min_cs)
