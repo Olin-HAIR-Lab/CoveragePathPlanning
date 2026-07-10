@@ -15,7 +15,7 @@ from rewards import compute_cost, CompositeReward, get_variance_metrics
 from planner import NStepLookaheadPlanner
 from visualize import plot_results, plot_candidate_scores, plot_tree_candidate_paths, nrmse_over_dist
 
-from lloydsAlgorithm import Lloyd_algoritm
+from lloydsAlgorithm import lloyd_algorithm
 from vehicleRoutingProblem import solve_vrp_balanced, extract_paths
 
 @dataclass
@@ -27,8 +27,7 @@ class SimulationConfig:
     n_candidates: int = 10
     min_candidate_spacing: float = 20
     presample_pts: int = 3
-    lloyd_iterations: int = 5
-    lloyd_partition: int = 300
+    lloyd_iterations: int = 10
     seed: int | None = None
     make_plots: bool = True
     mean_weight: float = 0
@@ -117,13 +116,11 @@ def run_simulation(config):
 
     # Presampling 
     ll_iter = config.lloyd_iterations
-    ll_partition = config.lloyd_partition # density of grid
     ll_seed = config.seed
-    history_tessell, history_dots = Lloyd_algoritm(
-        ll_iter, config.presample_pts, region, ll_partition, ll_seed, log=config.make_plots
+    _, history_dots = lloyd_algorithm(
+        ll_iter, config.presample_pts, region, ll_seed, log=config.make_plots
     )
     
-    _ = history_tessell[-1]
     final_dots = history_dots[-1]
 
     coords = np.vstack([current_position, final_dots.copy()])
@@ -313,7 +310,7 @@ if __name__ == "__main__":
     config_in.dist_weight = 0.00001
     config_in.grad_mean_weight = 0.1
     config_in.far_from_mean_weight = 0.0
-    config_in.presample_pts = 3
+    config_in.presample_pts = 5
     config_in.budget = 1000
     config_in.std_weight = 1.0
     config_in.make_figure_7 = False

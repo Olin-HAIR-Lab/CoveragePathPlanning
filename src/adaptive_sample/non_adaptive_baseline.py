@@ -9,13 +9,13 @@ from shapely.affinity import translate
 
 from candidate_actions import generate_variance_candidates
 from model import MoistureModel
-from sample_ground_truth import sample_from_ground_truth, get_err
+from sample_ground_truth import sample_from_ground_truth, get_err, make_interpolated_ground_truth_grid
 from rewards import compute_cost, CompositeReward, get_variance_metrics, SAMPLE_COST
 from planner import NStepLookaheadPlanner
 from visualize import plot_results, plot_candidate_scores, plot_tree_candidate_paths, nrmse_over_dist
 from adaptive_sample import SimulationConfig, load_map_data
 
-from lloydsAlgorithm import Lloyd_algoritm
+from lloydsAlgorithm import lloyd_algorithm
 from vehicleRoutingProblem import solve_vrp_balanced, extract_paths
 
 def run_simulation(config):
@@ -24,6 +24,15 @@ def run_simulation(config):
     points, vertices, _, _ = load_map_data(config.data_path) 
     region = Polygon(vertices)
     budget_remaining = config.budget
+
+    ground_truth_grid = make_interpolated_ground_truth_grid(
+        points=points,
+        region = region,
+        resolution=config.grid_spacing,
+        k=5,
+        power=2,
+        max_dist=None
+    )
 
     # Initialize
     centroid = region.centroid
@@ -40,14 +49,12 @@ def run_simulation(config):
         # Try Voronoi partitions with N pts until we find one under budget
         print(f"Trying with {num_pts} points")
         ll_iter = config.lloyd_iterations
-        ll_partition = config.lloyd_partition # density of grid
         ll_seed = config.seed
 
-        history_tessell, history_dots = Lloyd_algoritm(
-            ll_iter, num_pts, region, ll_partition, ll_seed, log=config.make_plots
+        _, history_dots = lloyd_algorithm(
+            ll_iter, num_pts, region, ll_seed, log=config.make_plots
         )
         
-        _ = history_tessell[-1]
         final_dots = history_dots[-1]
 
         coords = np.vstack([current_position, final_dots.copy()])
@@ -93,13 +100,13 @@ def run_simulation(config):
         # We need to count the budget spent as well
         visited_count = 1
         for pt in visited_pts[1:,:]:
-            initial_sample_pos, initial_sample_value = sample_from_ground_truth(pt, points)
+            initial_sample_pos, initial_sample_value = sample_from_ground_truth(pt, ground_truth_grid)
             model.add_observation(initial_sample_pos, initial_sample_value, virtual=False)
 
             budget_remaining -= compute_cost(current_position, pt)
 
             if config.make_figure_7:
-                info = nrmse_over_dist(points=points, model=model, visited_pts=visited_pts[0:visited_count,:])
+                info = nrmse_over_dist(points=ground_truth_grid, model=model, visited_pts=visited_pts[0:visited_count,:])
                 info |= {
                     "path": config.data_path,
                     "presample": True
@@ -123,16 +130,17 @@ def run_simulation(config):
 
     if config.make_plots:
         plot_results(
-            points=points,
+            points=ground_truth_grid,
+            points_original=points,
             region=region,
             model=model,
             visited_pts=visited_pts,
             resolution=config.grid_spacing,
         )
     
-    rmse,nrmse,_,rmse_over_std = get_err(gp=model.gp, points=points)
-    data_range = np.ptp(points['Moisture'].to_numpy())
-    data_std = np.std(points['Moisture'].to_numpy())
+    rmse,nrmse,_,rmse_over_std = get_err(gp=model.gp, points=ground_truth_grid)
+    data_range = np.ptp(ground_truth_grid['Moisture'].to_numpy())
+    data_std = np.std(ground_truth_grid['Moisture'].to_numpy())
     lengthscale = model.gp.kernel_.get_params()['k1__length_scale']
     num_pts = visited_pts.shape[0]
     results = {
