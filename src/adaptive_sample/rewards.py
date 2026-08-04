@@ -41,8 +41,12 @@ class VarianceMinusDistanceReward:
         return std - self.distance_weight * np.linalg.norm(current_pos - target_pos)
 
 # Very rough estimate --- let's assume cost + budget is in seconds
-SAMPLE_COST = 60 # 60 seconds to sample
-COST_PER_METER = 0.5 # 2 m/s
+# SAMPLE_COST = 60 # 60 seconds to sample
+# COST_PER_METER = 0.5 # 2 m/s
+
+# Estimate from testing --- cost + budget is in watt hours
+SAMPLE_COST = 7.825
+COST_PER_METER = 0.0853
 
 def compute_cost(current,target,sample=True):
     # Cost is distance plus sampling time

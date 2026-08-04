@@ -1,6 +1,46 @@
 import numpy as np
 from shapely.geometry import Point
 from scipy.ndimage import maximum_filter
+import numpy as np
+from scipy.spatial import cKDTree
+from planner import get_gp_length_scale, neighborhood_std_reward
+
+def neighborhood_std_scores(
+    grid_points,
+    std,
+    length_scale,
+    grid_resolution,
+):
+    """
+    Compute full-circle-normalized neighborhood standard deviation
+    for every valid grid point.
+
+    grid_points: shape (N, 2), containing only points inside the region
+    std: shape (N,), GP std at those points
+    """
+    grid_points = np.asarray(grid_points, dtype=float).reshape(-1, 2)
+    std = np.asarray(std, dtype=float).reshape(-1)
+
+    radius = max(float(length_scale), float(grid_resolution))
+    tree = cKDTree(grid_points)
+
+    neighbor_indices = tree.query_ball_point(
+        grid_points,
+        r=radius,
+    )
+
+    cell_area = grid_resolution**2
+    full_circle_area = np.pi * radius**2
+
+    scores = np.empty(len(grid_points), dtype=float)
+
+    for i, indices in enumerate(neighbor_indices):
+        scores[i] = (
+            np.sum(std[indices]) * cell_area
+            / full_circle_area
+        )
+
+    return scores
 
 def grid_points_in_polygon(region, resolution):
     """
@@ -32,6 +72,8 @@ def generate_variance_candidates(
     region,
     rwd_fun,
     current_pos,
+    integrate_std,
+    fixed_radius=None,
     resolution=2.0,
     n_candidates=5,
     min_spacing=5,
@@ -60,11 +102,26 @@ def generate_variance_candidates(
     pred_mean, pred_std = gp.predict(grid_inside, return_std=True)
     avg_mean = np.mean(pred_mean.flatten())
 
+    if integrate_std:
+        if fixed_radius is None:
+            length_scale = get_gp_length_scale(gp)
+        else:
+            length_scale = fixed_radius
+
+        std_scores = neighborhood_std_scores(
+            grid_points=grid_inside,
+            std=pred_std,
+            length_scale=length_scale,
+            grid_resolution=resolution
+        )
+    else:
+        std_scores = pred_std
+
     mean_grid = np.full(len(full_grid), np.nan)
     std_grid = np.full(len(full_grid), np.nan)
 
     mean_grid[inside] = pred_mean
-    std_grid[inside] = pred_std
+    std_grid[inside] = std_scores
 
     mean_grid = mean_grid.reshape(xx.shape)
     std_grid = std_grid.reshape(xx.shape)

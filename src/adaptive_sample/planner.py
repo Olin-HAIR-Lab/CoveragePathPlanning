@@ -5,6 +5,78 @@ from dataclasses import dataclass
 from rewards import compute_cost, MaximumVarianceReward, VarianceMinusDistanceReward
 from model import MoistureModel
 from shapely.geometry import Point
+from shapely.prepared import prep
+
+def get_gp_length_scale(gp) -> float:
+    params = gp.kernel.get_params()
+
+    length_scale_keys = [key for key in params if key.endswith("length_scale")]
+
+    if not length_scale_keys:
+        raise ValueError(
+            f"Could not find an RBF length scale in kernel {gp.kernel_}"
+        )
+
+    length_scale = np.asarray(
+        params[length_scale_keys[0]],
+        dtype=float,
+    )
+
+    return float(length_scale.item())
+
+def neighborhood_std_reward(
+    gp,
+    candidate,
+    region,
+    fixed_radius=None,
+    resolution=2.0,
+    radius_scale=1.0,
+):
+    candidate = np.asarray(candidate, dtype=float).reshape(2)
+
+    length_scale = get_gp_length_scale(gp)
+
+    if fixed_radius is None:
+        radius = max(radius_scale * length_scale, resolution)
+    else:
+        radius = fixed_radius
+
+    # Grid covering the candidate-centered disk.
+    offsets = np.arange(-radius, radius + resolution, resolution)
+    dx, dy = np.meshgrid(offsets, offsets)
+
+    disk_mask = dx**2 + dy**2 <= radius**2
+
+    eval_pts = np.column_stack([
+        candidate[0] + dx[disk_mask],
+        candidate[1] + dy[disk_mask],
+    ])
+
+    # Remove points outside the field.
+    prepared_region = prep(region)
+    inside_mask = np.fromiter(
+        (
+            prepared_region.covers(Point(float(x), float(y)))
+            for x, y in eval_pts
+        ),
+        dtype=bool,
+        count=len(eval_pts),
+    )
+
+    eval_pts = eval_pts[inside_mask]
+
+    if len(eval_pts) == 0:
+        return 0.0
+
+    _, std = gp.predict(eval_pts, return_std=True)
+
+    # Each grid point represents approximately resolution**2 square metres.
+    cell_area = resolution**2
+    integrated_std = np.sum(std) * cell_area
+
+    full_circle_area = np.pi * radius**2
+
+    return float(integrated_std / full_circle_area)
 
 @dataclass
 class TreeNode:
@@ -43,9 +115,23 @@ def score_virtual_path(model, rwd_fun, start_pos, path):
     return total_score
 
 class NStepLookaheadPlanner:
-    def __init__(self,rwd_fun,n_steps=3):
+    def __init__(
+        self,
+        rwd_fun,
+        region,
+        integrate_std,
+        fixed_length_scale = None,
+        n_steps=3,
+        std_resolution=2.0,
+        std_radius_scale=1.0
+    ):
         self.n_steps = n_steps
         self.rwd_fun = rwd_fun
+        self.region = region
+        self.integrate_std = integrate_std
+        self.fixed_length_scale = fixed_length_scale
+        self.std_resolution = std_resolution
+        self.std_radius_scale = std_radius_scale
     
     def plan(self, model, candidates, current_pos, budget_remaining, field_mean, log=False):
         # Start with the root node (zero reward, hasn't traveled at all)
@@ -79,8 +165,20 @@ class NStepLookaheadPlanner:
                     child_model = copy.deepcopy(node.model)
 
                     #print(f"Trying to predict {candidate}")
-                    mean, std = child_model.gp.predict(candidate.reshape(-1,2),return_std=True)
 
+                    if self.integrate_std:
+                        mean = child_model.gp.predict(candidate.reshape(-1,2)).item()
+                        std = neighborhood_std_reward(
+                            gp=child_model.gp,
+                            candidate=candidate,
+                            region=self.region,
+                            fixed_radius=self.fixed_length_scale,
+                            resolution=self.std_resolution,
+                            radius_scale=self.std_radius_scale,
+                        )
+                    
+                    else:
+                        mean, std = child_model.gp.predict(candidate.reshape(-1,2),return_std=True)
                     # If we want the gradient of the mean, we need a grid around the point we want
                     h = 5.0
                     xs = candidate[0] + np.array([-h, 0.0, h])
@@ -135,81 +233,3 @@ class NStepLookaheadPlanner:
         if log:
             print(f"Choosing waypoint {best_node.path[0]}")
         return [best_node.path[0]], frontier, best_node
-
-
-class VarianceMinusDistancePlanner:
-    def __init__(self):
-        dist_weight = 0.001
-        self.rwd_fun = VarianceMinusDistanceReward(dist_weight)
-    
-    def plan(self, model, candidates, current_pos, budget_remaining):
-        best_score = -np.inf
-        best_candidate = None
-        print(f"Candidates: {candidates}")
-
-        for x in candidates:
-            print(f"Candidate: {x}")
-            cost = compute_cost(current=current_pos, target=x, sample=True)
-
-            if cost > budget_remaining:
-                continue
-
-            score = score_virtual_path(
-                model=model,
-                rwd_fun=self.rwd_fun,
-                path=x,
-                start_pos=current_pos
-            )
-
-            # Information per unit cost
-            print(f"Score {score:.4f}, cost {cost:.2f}")
-            utility = score
-
-            if utility > best_score:
-                best_score = utility
-                best_candidate = x
-
-        if best_candidate is None:
-            #print("Couldn't find any plans under budget!")
-            return []
-
-        print(f"Best point to sample is {best_candidate[0]} from path {best_candidate} with score {best_score}")
-        return [best_candidate[0]]
-
-class GreedyVariancePlanner:
-    def __init__(self):
-        self.rwd_fun = MaximumVarianceReward()
-
-    def plan(self, model, candidates, current_pos, budget_remaining):
-        best_score = -np.inf
-        best_point = None
-
-        for x in candidates:
-            #print(f"Candidate: {x}")
-            cost = compute_cost(current=current_pos, target=x, sample=True)
-
-            if cost > budget_remaining:
-                continue
-
-            score = score_virtual_path(
-                model=model,
-                rwd_fun=self.rwd_fun,
-                path=[x],
-                start_pos=current_pos
-            )
-
-            # Information per unit cost
-            print(f"Score {score:.4f}, cost {cost:.2f}")
-            utility = score - 0.0001 * cost
-            #print(f"Plan has utility {utility:.2f} from score {score:.2f}")
-
-            if utility > best_score:
-                best_score = utility
-                best_point = x
-
-        if best_point is None:
-            #print("Couldn't find any plans under budget!")
-            return []
-
-        print(f"Best point to sample is {best_point}")
-        return [best_point]
